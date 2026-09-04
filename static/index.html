@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTCUSDT 15m Predictor</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb; --border: #e6e5e1;
+    --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8985;
+    --bull: #0ca30c; --bear: #d03b3b; --neutral: #8a8985; --accent: #2a78d6;
+    --bull-bg: #e8f6e8; --bear-bg: #fbe9e9; --neutral-bg: #f0efec;
+    --grid: #ecebe7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --surface: #1a1a19; --border: #2c2c2a;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8985;
+      --bull-bg: #123a12; --bear-bg: #3f1717; --neutral-bg: #383835; --grid: #262624;
+      --accent: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .meta { color: var(--ink-2); font-size: 13px; }
+  .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+  .card h2 { margin: 0 0 4px; font-size: 13px; font-weight: 600; letter-spacing: .02em;
+             text-transform: uppercase; color: var(--ink-2); }
+  .sub { color: var(--ink-3); font-size: 12px; margin-bottom: 12px; }
+  .verdict { display: flex; align-items: center; gap: 14px; margin: 8px 0 14px; }
+  .badge { font-size: 22px; font-weight: 700; padding: 8px 16px; border-radius: 8px; letter-spacing: .02em; }
+  .badge.BULLISH { background: var(--bull-bg); color: var(--bull); }
+  .badge.BEARISH { background: var(--bear-bg); color: var(--bear); }
+  .badge.NEUTRAL { background: var(--neutral-bg); color: var(--ink-2); }
+  .badge::before { margin-right: 6px; }
+  .badge.BULLISH::before { content: "▲"; } .badge.BEARISH::before { content: "▼"; } .badge.NEUTRAL::before { content: "■"; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
+  .kv dt { color: var(--ink-2); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .bar { position: relative; height: 10px; border-radius: 5px; background: var(--neutral-bg); margin: 10px 0 4px; overflow: hidden; }
+  .bar .fill { position: absolute; top: 0; bottom: 0; }
+  .bar .mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; background: var(--ink-3); }
+  .scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+  .agree { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+           font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); }
+  .agree .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--neutral); }
+  .agree.yes .dot { background: var(--bull); } .agree.no .dot { background: var(--bear); }
+  .chart { height: 320px; width: 100%; }
+  .chart.small { height: 130px; }
+  .charthead { display: flex; justify-content: space-between; align-items: baseline; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .legend .l-bull::before { background: var(--bull); } .legend .l-bear::before { background: var(--bear); } .legend .l-p::before { background: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--ink-2); font-weight: 600; font-size: 12px; }
+  td.num, th.num { text-align: right; }
+  .up { color: var(--bull); } .down { color: var(--bear); } .flat { color: var(--ink-3); }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.inv { background: var(--bear-bg); color: var(--bear); } .pill.keep { background: var(--bull-bg); color: var(--bull); } .pill.off { background: var(--neutral-bg); color: var(--ink-2); }
+  .tick { font-weight: 700; } .tick.hit { color: var(--bull); } .tick.miss { color: var(--bear); }
+  .scroll { overflow-x: auto; }
+  .err { background: var(--bear-bg); color: var(--bear); padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
+  footer { margin-top: 22px; color: var(--ink-3); font-size: 12px; }
+  .span2 { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>BTCUSDT · 15m next-candle predictor</h1>
+    <span class="meta">Last closed: <b id="lastCandle">–</b></span>
+    <span class="meta">Last close: <b id="lastClose">–</b></span>
+    <span class="meta">Predicting candle opening <b id="nextOpen">–</b> · closes in <b id="countdown">–</b></span>
+    <span class="meta" id="status"></span>
+  </header>
+
+  <div id="error" class="err" hidden></div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1 · Machine learning</h2>
+      <div class="sub">LightGBM on 50 features · walk-forward out-of-sample</div>
+      <div class="verdict"><span id="mlBadge" class="badge NEUTRAL">–</span>
+        <div><div style="font-size:26px;font-weight:600;font-variant-numeric:tabular-nums"><span id="mlP">–</span></div>
+             <div class="sub" style="margin:0">P(bullish)</div></div></div>
+      <div class="bar"><div id="mlFill" class="fill"></div><div class="mid"></div></div>
+      <div class="scale"><span>0 · bearish</span><span>0.5</span><span>bullish · 1</span></div>
+      <dl class="kv" style="margin-top:12px">
+        <dt>Confidence</dt><dd id="mlConf">–</dd>
+        <dt>Out-of-sample accuracy</dt><dd id="mlAcc">–</dd>
+        <dt>Out-of-sample AUC</dt><dd id="mlAuc">–</dd>
+        <dt>Hit rate, last <span id="nRecent1">–</span> candles</dt><dd id="mlRecent">–</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>2 · Technical analysis</h2>
+      <div class="sub">18 indicator votes · weights calibrated on 2023-24, tested on 2024-26</div>
+      <div class="verdict"><span id="taBadge" class="badge NEUTRAL">–</span>
+        <div><div style="font-size:26px;font-weight:600;font-variant-numeric:tabular-nums"><span id="taScore">–</span></div>
+             <div class="sub" style="margin:0">weighted score</div></div></div>
+      <div class="bar"><div id="taFill" class="fill"></div><div class="mid"></div></div>
+      <div class="scale"><span>bearish</span><span>0</span><span>bullish</span></div>
+      <dl class="kv" style="margin-top:12px">
+        <dt>Confidence</dt><dd id="taConf">–</dd>
+        <dt>Out-of-sample accuracy</dt><dd id="taAcc">–</dd>
+        <dt>Textbook vote (equal weights)</dt><dd id="taBook">–</dd>
+        <dt>Hit rate, last <span id="nRecent2">–</span> calls</dt><dd id="taRecent">–</dd>
+      </dl>
+    </section>
+
+    <section class="card span2" style="padding:12px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <span id="agree" class="agree"><span class="dot"></span><span id="agreeText">–</span></span>
+      <span class="sub" style="margin:0">Both methods score only a few points above a coin flip. Treat the output as a weak signal, not trading advice.</span>
+    </section>
+
+    <section class="card span2">
+      <div class="charthead"><h2>Price · last <span id="nRecent3">–</span> closed candles (UTC)</h2>
+        <div class="legend"><span class="l-bull">Bullish candle</span><span class="l-bear">Bearish candle</span></div></div>
+      <div id="priceChart" class="chart"></div>
+      <div class="charthead" style="margin-top:10px"><h2>ML P(bullish) for the following candle</h2>
+        <div class="legend"><span class="l-p">P(bullish)</span></div></div>
+      <div id="probChart" class="chart small"></div>
+    </section>
+
+    <section class="card">
+      <h2>TA signal breakdown</h2>
+      <div class="sub">▲ bullish ▼ bearish – none · weight: +1 keep, −1 invert, 0 ignore · Net = vote × weight · Hit % = out-of-sample accuracy when voting</div>
+      <div class="scroll"><table id="sigTable">
+        <thead><tr><th>Signal</th><th>Vote</th><th>Weight</th><th>Net</th><th class="num">Hit %</th></tr></thead>
+        <tbody></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <h2>Recent predictions vs outcome</h2>
+      <div class="sub">What each method said before the candle, and what happened</div>
+      <div class="scroll"><table id="recentTable">
+        <thead><tr><th>Candle</th><th class="num">p</th><th>ML</th><th>TA</th><th>Actual</th><th>ML</th><th>TA</th></tr></thead>
+        <tbody></tbody></table></div>
+    </section>
+  </div>
+  <footer>Data: Binance public klines. Refreshes every 30 s and right after each candle closes. Not financial advice.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const pct = x => x == null ? '–' : (x * 100).toFixed(1) + '%';
+const fmtT = ts => new Date(ts * 1000).toISOString().slice(11, 16);
+let nextCloseTs = null, priceChart, probChart, candles, probLine, lastKey = null;
+
+function initCharts() {
+  const common = {
+    layout: { background: { color: css('--surface') }, textColor: css('--ink-2') },
+    grid: { vertLines: { color: css('--grid') }, horzLines: { color: css('--grid') } },
+    rightPriceScale: { borderColor: css('--border') },
+    timeScale: { borderColor: css('--border'), timeVisible: true, secondsVisible: false },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    handleScroll: true, handleScale: true,
+  };
+  priceChart = LightweightCharts.createChart($('priceChart'), common);
+  candles = priceChart.addCandlestickSeries({
+    upColor: css('--bull'), downColor: css('--bear'), borderVisible: false,
+    wickUpColor: css('--bull'), wickDownColor: css('--bear'),
+  });
+  probChart = LightweightCharts.createChart($('probChart'), { ...common, rightPriceScale: { ...common.rightPriceScale, scaleMargins: { top: 0.1, bottom: 0.1 } } });
+  probLine = probChart.addLineSeries({ color: css('--accent'), lineWidth: 2, priceFormat: { type: 'custom', formatter: v => v.toFixed(2) } });
+  probLine.createPriceLine({ price: 0.5, color: css('--ink-3'), lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+  // keep the two time axes in sync
+  let syncing = false;
+  const sync = (from, to) => from.timeScale().subscribeVisibleLogicalRangeChange(r => {
+    if (syncing || !r) return; syncing = true; to.timeScale().setVisibleLogicalRange(r); syncing = false; });
+  sync(priceChart, probChart); sync(probChart, priceChart);
+  const ro = new ResizeObserver(() => { priceChart.applyOptions({ width: $('priceChart').clientWidth }); probChart.applyOptions({ width: $('probChart').clientWidth }); });
+  ro.observe($('priceChart'));
+}
+
+function render(d) {
+  $('error').hidden = true;
+  $('lastCandle').textContent = d.last_closed_candle.slice(0, 16);
+  $('lastClose').textContent = d.last_close.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  $('nextOpen').textContent = d.predicting_candle_open.slice(11, 16) + ' UTC';
+  nextCloseTs = d.next_close_ts;
+
+  const m = d.ml;
+  $('mlBadge').className = 'badge ' + m.prediction; $('mlBadge').textContent = m.prediction;
+  $('mlP').textContent = m.p_bullish.toFixed(3);
+  $('mlConf').textContent = pct(m.confidence);
+  $('mlAcc').textContent = pct(m.oos_accuracy); $('mlAuc').textContent = m.oos_auc.toFixed(3);
+  $('mlRecent').textContent = pct(m.recent_hit_rate);
+  const f = $('mlFill'), bull = m.p_bullish >= 0.5;
+  f.style.background = bull ? css('--bull') : css('--bear');
+  f.style.left = bull ? '50%' : (m.p_bullish * 100) + '%';
+  f.style.width = Math.abs(m.p_bullish - 0.5) * 100 + '%';
+
+  const t = d.ta;
+  $('taBadge').className = 'badge ' + t.prediction; $('taBadge').textContent = t.prediction;
+  $('taScore').textContent = (t.score > 0 ? '+' : '') + t.score.toFixed(0);
+  $('taConf').textContent = pct(t.confidence);
+  $('taAcc').textContent = pct(t.oos_accuracy) + (t.textbook_oos_accuracy ? ` (textbook ${pct(t.textbook_oos_accuracy)})` : '');
+  $('taBook').textContent = `${t.textbook_vote.n_bull} bull / ${t.textbook_vote.n_bear} bear → ${t.textbook_vote.prediction.toLowerCase()}`;
+  $('taRecent').textContent = pct(t.recent_hit_rate);
+  const totalW = t.weights ? Object.values(t.weights).reduce((a, w) => a + Math.abs(w), 0) : t.signals.length;
+  const tf = $('taFill'), tbull = t.score > 0;
+  tf.style.background = t.score === 0 ? 'transparent' : (tbull ? css('--bull') : css('--bear'));
+  tf.style.left = tbull ? '50%' : (50 - Math.abs(t.score) / totalW * 50) + '%';
+  tf.style.width = Math.abs(t.score) / totalW * 50 + '%';
+
+  const ag = $('agree');
+  if (t.prediction === 'NEUTRAL') { ag.className = 'agree'; $('agreeText').textContent = 'TA is tied (no call). Only the ML prediction applies.'; }
+  else if (d.agreement) { ag.className = 'agree yes'; $('agreeText').textContent = `Both methods agree: ${m.prediction}`; }
+  else { ag.className = 'agree no'; $('agreeText').textContent = `Methods disagree: ML ${m.prediction}, TA ${t.prediction}`; }
+
+  const rec = d.recent;
+  ['nRecent1', 'nRecent3'].forEach(id => $(id).textContent = rec.length);
+  $('nRecent2').textContent = t.recent_calls;
+  candles.setData(rec.map(r => ({ time: r.time, open: r.open, high: r.high, low: r.low, close: r.close })));
+  probLine.setData(rec.map(r => ({ time: r.time, value: r.ml_p })));
+  priceChart.timeScale().fitContent();
+
+  const arrow = v => v > 0 ? '<span class="up" title="bullish">▲</span>' : v < 0 ? '<span class="down" title="bearish">▼</span>' : '<span class="flat" title="no vote">–</span>';
+  const wpill = w => w > 0 ? '<span class="pill keep">+1</span>' : w < 0 ? '<span class="pill inv">−1</span>' : '<span class="pill off">0</span>';
+  $('sigTable').querySelector('tbody').innerHTML = t.signals
+    .slice().sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution) || (b.acc_test || 0) - (a.acc_test || 0))
+    .map(s => `<tr><td>${s.name}</td><td>${arrow(s.vote)}</td><td>${wpill(s.weight)}</td><td>${arrow(s.contribution)}</td><td class="num">${s.acc_test == null ? '–' : (s.acc_test * 100).toFixed(1)}</td></tr>`).join('');
+
+  const tick = (call, actual) => call == null || actual == null ? '<span class="flat">–</span>'
+    : (call === actual ? '<span class="tick hit">✓</span>' : '<span class="tick miss">✗</span>');
+  const dirTxt = v => v == null ? '<span class="flat">none</span>' : v ? '<span class="up">bull</span>' : '<span class="down">bear</span>';
+  $('recentTable').querySelector('tbody').innerHTML = rec.slice(-16).reverse().map(r => {
+    const mlCall = r.ml_p >= 0.5 ? 1 : 0;
+    return `<tr><td>${fmtT(r.time + 900)}</td><td class="num">${r.ml_p.toFixed(3)}</td><td>${dirTxt(mlCall)}</td><td>${dirTxt(r.ta_dir)}</td>
+      <td>${r.actual == null ? '<span class="flat">forming…</span>' : dirTxt(r.actual)}</td><td>${tick(mlCall, r.actual)}</td><td>${tick(r.ta_dir, r.actual)}</td></tr>`;
+  }).join('');
+}
+
+async function load() {
+  $('status').textContent = 'refreshing…';
+  try {
+    const r = await fetch('/api/predict?recent=96', { cache: 'no-store' });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const d = await r.json();
+    if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); }
+    $('status').textContent = 'updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    $('error').hidden = false; $('error').textContent = 'Could not load prediction: ' + e.message;
+    $('status').textContent = '';
+  }
+}
+
+function tickClock() {
+  if (!nextCloseTs) return;
+  const s = Math.max(0, nextCloseTs - Date.now() / 1000);
+  $('countdown').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  if (s === 0 && !tickClock.pending) { tickClock.pending = true; setTimeout(() => { tickClock.pending = false; load(); }, 3000); }
+}
+
+initCharts(); load();
+setInterval(load, 30000); setInterval(tickClock, 1000);
+</script>
+</body>
+</html>

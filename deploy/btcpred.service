@@ -1,0 +1,14 @@
+[Unit]
+Description=BTCUSDT 15m predictor web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=developer
+WorkingDirectory=/home/developer/green_scanner
+ExecStart=/home/developer/green_scanner/.venv/bin/python app.py --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

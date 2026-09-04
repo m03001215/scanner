@@ -1,0 +1,15 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Free web service in Frankfurt (Binance blocks US IPs). Sleeps after 15 min idle; first hit takes ~1 min.
+services:
+  - type: web
+    name: btc-15m-predictor
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: BTCPRED_BOOT_DAYS
+        value: "45"
+      - key: BINANCE_BASE_URLS
+        value: "https://api.binance.com,https://data-api.binance.vision"

@@ -1,0 +1,7 @@
+.venv
+data
+deploy
+__pycache__
+*.pyc
+.git
+README.md
