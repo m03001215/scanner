@@ -256,9 +256,10 @@ function render(d) {
   const tick = (call, actual) => call == null || actual == null ? '<span class="flat">–</span>'
     : (call === actual ? '<span class="tick hit">✓</span>' : '<span class="tick miss">✗</span>');
   const dirTxt = v => v == null ? '<span class="flat">none</span>' : v ? '<span class="up">bull</span>' : '<span class="down">bear</span>';
+  const step = d.interval_seconds || 900;  // label each row with the candle being predicted (the following one)
   $('recentTable').querySelector('tbody').innerHTML = rec.slice(-16).reverse().map(r => {
     const mlCall = r.ml_p >= 0.5 ? 1 : 0;
-    return `<tr><td>${fmtT(r.time + 900)}</td><td class="num">${r.ml_p.toFixed(3)}</td><td>${dirTxt(mlCall)}</td><td>${dirTxt(r.ta_dir)}</td>
+    return `<tr><td>${fmtT(r.time + step)}</td><td class="num">${r.ml_p.toFixed(3)}</td><td>${dirTxt(mlCall)}</td><td>${dirTxt(r.ta_dir)}</td>
       <td>${r.actual == null ? '<span class="flat">forming…</span>' : dirTxt(r.actual)}</td><td>${tick(mlCall, r.actual)}</td><td>${tick(r.ta_dir, r.actual)}</td></tr>`;
   }).join('');
 }

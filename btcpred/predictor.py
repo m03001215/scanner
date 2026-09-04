@@ -123,6 +123,7 @@ def predict(interval: str = "15m", recent: int = 96, refresh: bool = True) -> di
 
     out = dict(
         symbol="BTCUSDT", interval=interval, intervals=list(INTERVALS),
+        interval_seconds=data.INTERVAL_MS[interval] // 1000,
         last_closed_candle=key, last_close=float(last_bar["close"]),
         predicting_candle_open=str(next_open), predicting_candle_close=str(next_close),
         next_close_ts=int(next_close.timestamp()),
