@@ -10,22 +10,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from btcpred import data, features, model, ta
-
-ROOT = Path(__file__).resolve().parent
-CACHE = ROOT / "data" / "btcusdt_15m.parquet"
-MODEL_DIR = ROOT / "models" / "lgbm"
+from btcpred import data, features, model, predictor, ta
+from btcpred.predictor import INTERVALS, cache_path, model_dir, ta_report_path
 
 
 def cmd_fetch(args):
-    df = data.load_or_update(CACHE, days=args.days)
+    df = data.load_or_update(cache_path(args.interval), interval=args.interval, days=args.days)
     print(f"{len(df)} candles cached: {df['open_time'].iloc[0]} -> {df['open_time'].iloc[-1]}")
 
 
 def cmd_train(args):
-    df = data.drop_open_candle(data.load_or_update(CACHE, days=args.days))
+    df = data.drop_open_candle(data.load_or_update(cache_path(args.interval), interval=args.interval, days=args.days))
     X, y, t = features.build_dataset(df)
-    print(f"dataset: {len(X)} rows, {X.shape[1]} features, {t.iloc[0]} -> {t.iloc[-1]}")
+    print(f"[{args.interval}] dataset: {len(X)} rows, {X.shape[1]} features, {t.iloc[0]} -> {t.iloc[-1]}")
     print(f"bullish rate: {y.mean():.4f}")
 
     report = model.walk_forward(X, y, t, n_folds=args.folds)
@@ -41,18 +38,18 @@ def cmd_train(args):
 
     rounds = int(np.median([f["best_iter"] for f in report["folds"]])) or 200
     booster = model.train_final(X, y, rounds)
-    model.save(booster, list(X.columns), report, MODEL_DIR)
+    model.save(booster, list(X.columns), report, model_dir(args.interval))
     imp = pd.Series(booster.feature_importance("gain"), index=X.columns).sort_values(ascending=False)
     print("\nTop features (gain):")
     print(imp.head(12).round(1).to_string())
-    print(f"\nmodel saved to {MODEL_DIR}")
+    print(f"\nmodel saved to {model_dir(args.interval)}")
 
 
 def cmd_backtest_ta(args):
-    df = data.drop_open_candle(data.load_or_update(CACHE, days=args.days))
+    df = data.drop_open_candle(data.load_or_update(cache_path(args.interval), interval=args.interval, days=args.days))
     labels = features.build_labels(df)
     rep = ta.backtest(df, labels)
-    print(f"calibration window: {rep['calib_start'][:10]} .. {rep['test_start'][:10]}")
+    print(f"[{args.interval}] calibration window: {rep['calib_start'][:10]} .. {rep['test_start'][:10]}")
     print(f"test window       : {rep['test_start'][:10]} .. {rep['test_end'][:10]}  (n={rep['calibrated_oos']['n']})\n")
     for title, c in (("Textbook equal-weight vote (out-of-sample)", rep["textbook_oos"]),
                      ("Calibrated vote (out-of-sample)", rep["calibrated_oos"])):
@@ -67,21 +64,22 @@ def cmd_backtest_ta(args):
     rows = sorted(rep["per_signal"].items(), key=lambda kv: -(kv[1]["acc_test"] or 0))
     for name, r in rows:
         print(f"  {name:22s} {r['acc_calib']:.4f} | {r['acc_test']:.4f}   cov={r['coverage_test']:.3f}   w={r['weight']:+.0f}")
-    MODEL_DIR.parent.mkdir(parents=True, exist_ok=True)
-    (MODEL_DIR.parent / "ta_report.json").write_text(json.dumps(rep, indent=2))
-    print(f"\nweights + report saved to {MODEL_DIR.parent / 'ta_report.json'}")
+    out = ta_report_path(args.interval)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(rep, indent=2))
+    print(f"\nweights + report saved to {out}")
 
 
 def cmd_predict(args):
-    from btcpred import predictor
     try:
-        out = predictor.predict()
+        out = predictor.predict(interval=args.interval)
     except (FileNotFoundError, ValueError) as e:
         sys.exit(str(e))
     if args.json:
         out = {k: v for k, v in out.items() if k != "recent"}
         print(json.dumps(out, indent=2)); return
     ml, t = out["ml"], out["ta"]
+    print(f"Timeframe          : {out['interval']}")
     print(f"Last closed candle : {out['last_closed_candle']}  close={out['last_close']:.2f}")
     print(f"Next candle opens  : {out['predicting_candle_open']}\n")
     print("[1] ML model (LightGBM)")
@@ -107,11 +105,15 @@ def cmd_predict(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("fetch", help="download / update cached klines"); s.add_argument("--days", type=int, default=730)
-    s = sub.add_parser("train", help="walk-forward evaluate and train final model")
+    def add(name, help_):
+        sp = sub.add_parser(name, help=help_)
+        sp.add_argument("--interval", "-i", choices=INTERVALS, default="15m", help="candle timeframe (default 15m)")
+        return sp
+    s = add("fetch", "download / update cached klines"); s.add_argument("--days", type=int, default=730)
+    s = add("train", "walk-forward evaluate and train final ML model")
     s.add_argument("--days", type=int, default=730); s.add_argument("--folds", type=int, default=5)
-    s = sub.add_parser("backtest-ta", help="evaluate the rule-based TA predictor"); s.add_argument("--days", type=int, default=730)
-    s = sub.add_parser("predict", help="predict direction of the next 15m candle (ML + TA)"); s.add_argument("--json", action="store_true")
+    s = add("backtest-ta", "calibrate and evaluate the rule-based TA predictor"); s.add_argument("--days", type=int, default=730)
+    s = add("predict", "predict direction of the next candle (ML + TA)"); s.add_argument("--json", action="store_true")
     args = ap.parse_args()
     {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "predict": cmd_predict}[args.cmd](args)
 

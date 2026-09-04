@@ -11,41 +11,67 @@ import pandas as pd
 from . import data, features, model, ta
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE = ROOT / "data" / "btcusdt_15m.parquet"
-MODEL_DIR = ROOT / "models" / "lgbm"
-TA_REPORT = ROOT / "models" / "ta_report.json"
-# Days of history to download when no cache exists (features need ~200 bars; 45 days is ~4300).
-BOOT_DAYS = int(os.environ.get("BTCPRED_BOOT_DAYS", "45"))
+INTERVALS = ("15m", "1h")
+# Days of history to download when no cache exists (features need ~300 bars of warm-up
+# plus the `recent` window). Override with BTCPRED_BOOT_DAYS.
+_BOOT_DAYS = {"15m": 45, "1h": 150}
 
 _CACHE: dict = {}
-_MODEL: tuple | None = None
+_MODELS: dict = {}
 
 
-def _load_model():
-    global _MODEL
-    if _MODEL is None:
-        if not (MODEL_DIR / "model.txt").exists():
-            raise FileNotFoundError("no trained model; run `python main.py train` first")
-        _MODEL = model.load(MODEL_DIR)
-    return _MODEL
+def cache_path(interval: str) -> Path:
+    return ROOT / "data" / f"btcusdt_{interval}.parquet"
 
 
-def _ta_report() -> dict | None:
-    return json.loads(TA_REPORT.read_text()) if TA_REPORT.exists() else None
+def model_dir(interval: str) -> Path:
+    return ROOT / "models" / interval / "lgbm"
 
 
-def predict(recent: int = 96, refresh: bool = True) -> dict:
-    """Return ML + TA predictions for the next candle, plus recent history.
+def ta_report_path(interval: str) -> Path:
+    return ROOT / "models" / interval / "ta_report.json"
 
-    Result is cached per last-closed-candle so repeated calls within the same 15m window
-    only hit Binance once per `refresh` (a cheap 1-2 row fetch).
+
+def boot_days(interval: str) -> int:
+    env = os.environ.get("BTCPRED_BOOT_DAYS")
+    return int(env) if env else _BOOT_DAYS.get(interval, 60)
+
+
+def _check_interval(interval: str) -> str:
+    if interval not in INTERVALS:
+        raise ValueError(f"unsupported interval {interval!r}; choose one of {INTERVALS}")
+    return interval
+
+
+def _load_model(interval: str):
+    if interval not in _MODELS:
+        d = model_dir(interval)
+        if not (d / "model.txt").exists():
+            raise FileNotFoundError(f"no trained {interval} model; run `python main.py train --interval {interval}` first")
+        _MODELS[interval] = model.load(d)
+    return _MODELS[interval]
+
+
+def _ta_report(interval: str) -> dict | None:
+    p = ta_report_path(interval)
+    return json.loads(p.read_text()) if p.exists() else None
+
+
+def predict(interval: str = "15m", recent: int = 96, refresh: bool = True) -> dict:
+    """Return ML + TA predictions for the next candle of `interval`, plus recent history.
+
+    Result is cached per (interval, last-closed-candle, recent) so repeated calls within the
+    same candle only hit Binance for a cheap 1-2 row update.
     """
-    booster, meta = _load_model()
-    df = data.load_or_update(CACHE, days=BOOT_DAYS) if refresh else pd.read_parquet(CACHE)
+    interval = _check_interval(interval)
+    booster, meta = _load_model(interval)
+    cache = cache_path(interval)
+    df = (data.load_or_update(cache, interval=interval, days=boot_days(interval))
+          if refresh else pd.read_parquet(cache))
     df = data.drop_open_candle(df)
     last_bar = df.iloc[-1]
     key = str(last_bar["open_time"])
-    ck = (key, recent)
+    ck = (interval, key, recent)
     if ck in _CACHE:
         return _CACHE[ck]
 
@@ -56,7 +82,7 @@ def predict(recent: int = 96, refresh: bool = True) -> dict:
     p_hist = booster.predict(tail.fillna(0))
     p = float(p_hist[-1])
 
-    ta_rep = _ta_report()
+    ta_rep = _ta_report(interval)
     weights = ta_rep["weights"] if ta_rep else None
     sig = ta.signals(df)
     agg_w = ta.score(sig, weights)
@@ -65,8 +91,9 @@ def predict(recent: int = 96, refresh: bool = True) -> dict:
     ta_book = ta.predict_last(df)
 
     ml_dir = "BULLISH" if p >= 0.5 else "BEARISH"
-    next_open = (last_bar["close_time"] + pd.Timedelta(milliseconds=1)).floor("15min")
-    next_close = next_open + pd.Timedelta(minutes=15)
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
+    next_open = (last_bar["close_time"] + pd.Timedelta(milliseconds=1)).floor(step)
+    next_close = next_open + step
 
     # Recent history: candles + what each method said about the *following* candle + outcome
     rows = []
@@ -95,7 +122,7 @@ def predict(recent: int = 96, refresh: bool = True) -> dict:
     ]
 
     out = dict(
-        symbol="BTCUSDT", interval="15m",
+        symbol="BTCUSDT", interval=interval, intervals=list(INTERVALS),
         last_closed_candle=key, last_close=float(last_bar["close"]),
         predicting_candle_open=str(next_open), predicting_candle_close=str(next_close),
         next_close_ts=int(next_close.timestamp()),
@@ -116,7 +143,7 @@ def predict(recent: int = 96, refresh: bool = True) -> dict:
         agreement=(ml_dir == ta_res["prediction"]),
         recent=rows,
     )
-    for k in [k for k in _CACHE if k[0] != key]:  # drop entries from previous candles
+    for k in [k for k in _CACHE if k[0] == interval and k[1] != key]:  # drop stale candles
         del _CACHE[k]
     _CACHE[ck] = out
     return out

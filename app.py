@@ -20,11 +20,12 @@ log = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    try:  # warm the data cache + model so the first page load is fast
-        predictor.predict()
-        log.info("warm-up prediction done")
-    except Exception as e:  # noqa: BLE001
-        log.warning("warm-up failed (will retry on request): %s", e)
+    for iv in predictor.INTERVALS:  # warm the data cache + model so the first page load is fast
+        try:
+            predictor.predict(interval=iv)
+            log.info("warm-up prediction done for %s", iv)
+        except Exception as e:  # noqa: BLE001
+            log.warning("warm-up failed for %s (will retry on request): %s", iv, e)
     yield
 
 
@@ -43,17 +44,20 @@ def healthz():
 
 
 @app.get("/api/predict")
-def api_predict(recent: int = 96):
+def api_predict(interval: str = "15m", recent: int = 96):
     try:
-        return JSONResponse(predictor.predict(recent=min(max(recent, 16), 500)))
+        return JSONResponse(predictor.predict(interval=interval, recent=min(max(recent, 16), 500)))
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status_code=503, detail=str(e))
 
 
 @app.get("/api/report")
-def api_report():
-    _, meta = predictor._load_model()
-    return dict(ml=meta["report"], ta=predictor._ta_report())
+def api_report(interval: str = "15m"):
+    try:
+        _, meta = predictor._load_model(interval)
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return dict(interval=interval, ml=meta["report"], ta=predictor._ta_report(interval))
 
 
 if __name__ == "__main__":

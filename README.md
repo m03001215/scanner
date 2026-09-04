@@ -1,8 +1,8 @@
-# BTCUSDT 15m Next-Candle Predictor
+# BTCUSDT Next-Candle Predictor (15m / 1h)
 
-Predicts whether the **next** Binance BTCUSDT 15-minute candle will close bullish
-(close > open) or bearish, using two independent methods on ~3 years of public
-kline data:
+Predicts whether the **next** Binance BTCUSDT candle, on the **15-minute or 1-hour**
+timeframe, will close bullish (close > open) or bearish, using two independent
+methods on multi-year public kline data:
 
 1. **ML** - a LightGBM classifier over 50 engineered features.
 2. **TA** - a vote of 18 classic technical-analysis signals (EMA, MACD, RSI,
@@ -44,9 +44,11 @@ use only bars `<= t`, so there is no look-ahead.
 
 ## Out-of-sample results
 
-Both methods are evaluated on the same window: **Nov 2024 - Sep 2026, ~63k candles**.
-The ML model uses 5 expanding walk-forward folds; the TA weights are calibrated on
-Sep 2023 - Nov 2024 and frozen.
+For each timeframe both methods are evaluated on the same window (the newest 60% of
+history). The ML model uses 5 expanding walk-forward folds; the TA weights are
+calibrated on the oldest 40% and frozen.
+
+**15m** - test window Nov 2024 - Sep 2026, ~63k candles
 
 | Method | Accuracy | Coverage | Confident subset |
 |---|---|---|---|
@@ -56,6 +58,19 @@ Sep 2023 - Nov 2024 and frozen.
 | Majority-class baseline | 50.2% | 100% | |
 
 ML AUC 0.542, log loss 0.6906 (coin flip = 0.6931). Every ML fold scored between 52.4% and 53.8%.
+
+**1h** - test window May 2023 - Sep 2026, ~29k candles
+
+| Method | Accuracy | Coverage | Confident subset |
+|---|---|---|---|
+| ML (LightGBM) | **53.7%** | 100% | 56.6% on the 41% of candles with \|p-0.5\| >= 0.05; 60.7% on the 8% with >= 0.10 |
+| TA, calibrated weights | **52.8%** | 95% | 55.5% on the 27% of candles with confidence >= 0.4 |
+| TA, textbook equal-weight vote | 47.0% | 93% | |
+| Majority-class baseline | 50.7% | 100% | |
+
+ML AUC 0.553, log loss 0.6888. ML folds ranged 52.3% - 54.7%. The 1h edge is slightly
+larger than 15m, and the same mean-reversion pattern holds: every trend-following
+signal is inverted by calibration on both timeframes.
 
 ### Why textbook TA loses on 15m BTC
 
