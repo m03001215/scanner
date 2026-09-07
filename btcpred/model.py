@@ -33,7 +33,8 @@ def _fit(X_tr, y_tr, X_va=None, y_va=None, rounds: int = 2000) -> lgb.Booster:
 
 
 def walk_forward(X: pd.DataFrame, y: pd.Series, times: pd.Series,
-                 n_folds: int = 5, min_train_frac: float = 0.4) -> dict:
+                 n_folds: int = 5, min_train_frac: float = 0.4,
+                 return_predictions: bool = False) -> dict:
     """Expanding-window walk-forward: train on [0, split), test on next block."""
     n = len(X)
     first = int(n * min_train_frac)
@@ -53,8 +54,11 @@ def walk_forward(X: pd.DataFrame, y: pd.Series, times: pd.Series,
             **_metrics(yt, p),
         ))
     p_all, y_all = np.concatenate(all_p), np.concatenate(all_y)
-    return dict(folds=folds, overall=_metrics(y_all, p_all),
-                baseline_majority=float(max(y_all.mean(), 1 - y_all.mean())))
+    out = dict(folds=folds, overall=_metrics(y_all, p_all),
+               baseline_majority=float(max(y_all.mean(), 1 - y_all.mean())))
+    if return_predictions:
+        out["predictions"] = pd.DataFrame({"open_time": times.iloc[first:].values, "ml_p": p_all, "actual": y_all})
+    return out
 
 
 def _metrics(y, p) -> dict:

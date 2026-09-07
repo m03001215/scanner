@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from btcpred import data, features, model, predictor, ta
+from btcpred import backtest, data, features, model, predictor, ta
 from btcpred.predictor import INTERVALS, cache_path, model_dir, ta_report_path
 
 
@@ -70,6 +70,38 @@ def cmd_backtest_ta(args):
     print(f"\nweights + report saved to {out}")
 
 
+def cmd_backtest(args):
+    df = data.drop_open_candle(data.load_or_update(cache_path(args.interval), interval=args.interval, days=args.days))
+    bt = backtest.run(df, n_folds=args.folds)
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[args.interval])
+    out = ta_report_path(args.interval).parent / "backtest.csv"
+    save = bt.copy(); save["predicted_candle"] = save["open_time"] + step
+    save.to_csv(out, index=False)
+    lab = lambda v: "-" if pd.isna(v) else ("BULL" if int(v) == 1 else "BEAR")
+    pct = lambda v: "   -  " if pd.isna(v) else f"{v*100:5.1f}%"
+
+    print(f"[{args.interval}] out-of-sample replay: {len(bt)} candles, "
+          f"{(bt['open_time'].iloc[0] + step):%Y-%m-%d} .. {(bt['open_time'].iloc[-1] + step):%Y-%m-%d}")
+    print(f"  ML acc {bt['ml_hit'].mean()*100:.2f}%   TA acc {bt['ta_hit'].mean()*100:.2f}% "
+          f"(calls on {bt['ta_hit'].notna().mean()*100:.0f}%)   when both agree: "
+          f"{bt.loc[bt['agree'], 'ml_hit'].mean()*100:.2f}% on {bt['agree'].mean()*100:.0f}% of candles   "
+          f"bull rate {bt['actual'].mean()*100:.1f}%")
+    print("\nBy month:")
+    print(f"  {'month':8s} {'n':>6s} {'bull%':>6s} {'ML':>7s} {'TA':>7s} {'agree':>7s} {'agree n':>8s}")
+    for r in backtest.monthly(bt).itertuples():
+        print(f"  {r.month:8s} {r.candles:6d} {r.bull_rate*100:5.1f}% {pct(r.ml_acc):>7s} {pct(r.ta_acc):>7s} {pct(r.agree_acc):>7s} {r.agree_n:8d}")
+    print("\nML accuracy by confidence:")
+    for r in backtest.by_confidence(bt).itertuples():
+        print(f"  {r.bucket:20s} n={r.candles:6d} ({r.share*100:4.1f}%)  acc={pct(r.ml_acc)}")
+    n = args.rows
+    print(f"\nLast {n} candles (predicted candle open, UTC):")
+    print(f"  {'candle':16s} {'ML p':>6s} {'ML':>5s} {'TA':>5s} {'real':>5s}  ML  TA")
+    for r in bt.tail(n).itertuples():
+        mh = "✓" if r.ml_hit else "✗"; th = "-" if pd.isna(r.ta_hit) else ("✓" if r.ta_hit else "✗")
+        print(f"  {(r.open_time + step):%Y-%m-%d %H:%M} {r.ml_p:6.3f} {lab(r.ml_dir):>5s} {lab(r.ta_dir):>5s} {lab(r.actual):>5s}   {mh}   {th}")
+    print(f"\nfull per-candle table saved to {out}")
+
+
 def cmd_predict(args):
     try:
         out = predictor.predict(interval=args.interval)
@@ -113,9 +145,12 @@ def main():
     s = add("train", "walk-forward evaluate and train final ML model")
     s.add_argument("--days", type=int, default=730); s.add_argument("--folds", type=int, default=5)
     s = add("backtest-ta", "calibrate and evaluate the rule-based TA predictor"); s.add_argument("--days", type=int, default=730)
+    s = add("backtest", "replay ML + TA candle by candle over the out-of-sample window")
+    s.add_argument("--days", type=int, default=730); s.add_argument("--folds", type=int, default=5)
+    s.add_argument("--rows", type=int, default=20, help="how many recent candles to print")
     s = add("predict", "predict direction of the next candle (ML + TA)"); s.add_argument("--json", action="store_true")
     args = ap.parse_args()
-    {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "predict": cmd_predict}[args.cmd](args)
+    {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest, "predict": cmd_predict}[args.cmd](args)
 
 
 if __name__ == "__main__":
