@@ -1,0 +1,328 @@
+{
+ "interval": "15m",
+ "test_start": "2024-11-18",
+ "test_end": "2026-09-07",
+ "candles": 63202,
+ "bull_rate": 0.49827537103256225,
+ "ml_acc": 0.5291130027530775,
+ "ta_acc": 0.5233276740237691,
+ "ta_coverage": 0.9319325337805766,
+ "agree_acc": 0.5326684862481629,
+ "agree_share": 0.7536153919179773,
+ "agreement": [
+  {
+   "subset": "All candles (ML call)",
+   "candles": 63202,
+   "share": 1.0,
+   "accuracy": 0.5291130028,
+   "bull_rate": 0.498275371
+  },
+  {
+   "subset": "ML and TA agree",
+   "candles": 47630,
+   "share": 0.7536153919,
+   "accuracy": 0.5326684862,
+   "bull_rate": 0.4973546084
+  },
+  {
+   "subset": "ML and TA disagree",
+   "candles": 11270,
+   "share": 0.1783171419,
+   "accuracy": 0.5161490683,
+   "bull_rate": 0.5008873114
+  },
+  {
+   "subset": "TA has no call (tie)",
+   "candles": 4302,
+   "share": 0.0680674662,
+   "accuracy": 0.5237099024,
+   "bull_rate": 0.5016271502
+  },
+  {
+   "subset": "Agree, ML conf >= 0.02",
+   "candles": 34696,
+   "share": 0.5489699693,
+   "accuracy": 0.5434920452,
+   "bull_rate": 0.4991641688
+  },
+  {
+   "subset": "Agree, ML conf >= 0.05",
+   "candles": 15445,
+   "share": 0.244375178,
+   "accuracy": 0.5626416316,
+   "bull_rate": 0.5070249272
+  },
+  {
+   "subset": "Agree, TA conf >= 0.3",
+   "candles": 27108,
+   "share": 0.4289104775,
+   "accuracy": 0.5465914121,
+   "bull_rate": 0.4930278884
+  },
+  {
+   "subset": "Agree, ML >= 0.05 and TA >= 0.3",
+   "candles": 12837,
+   "share": 0.2031106611,
+   "accuracy": 0.5650853003,
+   "bull_rate": 0.5041676404
+  }
+ ],
+ "monthly": [
+  {
+   "month": "2024-11",
+   "candles": 1245,
+   "bull_rate": 0.5084337349,
+   "ml_acc": 0.5309236948,
+   "ta_acc": 0.5238508239,
+   "ta_calls": 1153,
+   "agree_acc": 0.5314834578,
+   "agree_n": 937
+  },
+  {
+   "month": "2024-12",
+   "candles": 2976,
+   "bull_rate": 0.5010080645,
+   "ml_acc": 0.5275537634,
+   "ta_acc": 0.5193687231,
+   "ta_calls": 2788,
+   "agree_acc": 0.5303167421,
+   "agree_n": 2210
+  },
+  {
+   "month": "2025-01",
+   "candles": 2976,
+   "bull_rate": 0.4996639785,
+   "ml_acc": 0.5221774194,
+   "ta_acc": 0.5196568978,
+   "ta_calls": 2798,
+   "agree_acc": 0.5278406519,
+   "agree_n": 2209
+  },
+  {
+   "month": "2025-02",
+   "candles": 2688,
+   "bull_rate": 0.5003720238,
+   "ml_acc": 0.53125,
+   "ta_acc": 0.5138387485,
+   "ta_calls": 2493,
+   "agree_acc": 0.5266301643,
+   "agree_n": 2009
+  },
+  {
+   "month": "2025-03",
+   "candles": 2976,
+   "bull_rate": 0.5023521505,
+   "ml_acc": 0.531922043,
+   "ta_acc": 0.5108932462,
+   "ta_calls": 2754,
+   "agree_acc": 0.5239574091,
+   "agree_n": 2254
+  },
+  {
+   "month": "2025-04",
+   "candles": 2880,
+   "bull_rate": 0.4996527778,
+   "ml_acc": 0.5375,
+   "ta_acc": 0.519431988,
+   "ta_calls": 2676,
+   "agree_acc": 0.5329474622,
+   "agree_n": 2246
+  },
+  {
+   "month": "2025-05",
+   "candles": 2976,
+   "bull_rate": 0.498655914,
+   "ml_acc": 0.529233871,
+   "ta_acc": 0.5222381636,
+   "ta_calls": 2788,
+   "agree_acc": 0.5328778822,
+   "agree_n": 2342
+  },
+  {
+   "month": "2025-06",
+   "candles": 2880,
+   "bull_rate": 0.4895833333,
+   "ml_acc": 0.5055555556,
+   "ta_acc": 0.5076010382,
+   "ta_calls": 2697,
+   "agree_acc": 0.5080469769,
+   "agree_n": 2299
+  },
+  {
+   "month": "2025-07",
+   "candles": 2976,
+   "bull_rate": 0.5010080645,
+   "ml_acc": 0.5235215054,
+   "ta_acc": 0.5167930661,
+   "ta_calls": 2769,
+   "agree_acc": 0.524610854,
+   "agree_n": 2377
+  },
+  {
+   "month": "2025-08",
+   "candles": 2976,
+   "bull_rate": 0.4889112903,
+   "ml_acc": 0.5258736559,
+   "ta_acc": 0.5170556553,
+   "ta_calls": 2785,
+   "agree_acc": 0.5270914608,
+   "agree_n": 2307
+  },
+  {
+   "month": "2025-09",
+   "candles": 2880,
+   "bull_rate": 0.5135416667,
+   "ml_acc": 0.53125,
+   "ta_acc": 0.533033033,
+   "ta_calls": 2664,
+   "agree_acc": 0.5376681614,
+   "agree_n": 2230
+  },
+  {
+   "month": "2025-10",
+   "candles": 2976,
+   "bull_rate": 0.4949596774,
+   "ml_acc": 0.5221774194,
+   "ta_acc": 0.5198555957,
+   "ta_calls": 2770,
+   "agree_acc": 0.5254237288,
+   "agree_n": 2242
+  },
+  {
+   "month": "2025-11",
+   "candles": 2880,
+   "bull_rate": 0.4972222222,
+   "ml_acc": 0.5232638889,
+   "ta_acc": 0.5201329885,
+   "ta_calls": 2707,
+   "agree_acc": 0.5278658813,
+   "agree_n": 2207
+  },
+  {
+   "month": "2025-12",
+   "candles": 2976,
+   "bull_rate": 0.5047043011,
+   "ml_acc": 0.5446908602,
+   "ta_acc": 0.5347322721,
+   "ta_calls": 2764,
+   "agree_acc": 0.550717925,
+   "agree_n": 2159
+  },
+  {
+   "month": "2026-01",
+   "candles": 2976,
+   "bull_rate": 0.4922715054,
+   "ml_acc": 0.5433467742,
+   "ta_acc": 0.5371242304,
+   "ta_calls": 2761,
+   "agree_acc": 0.5509259259,
+   "agree_n": 2160
+  },
+  {
+   "month": "2026-02",
+   "candles": 2688,
+   "bull_rate": 0.5033482143,
+   "ml_acc": 0.5200892857,
+   "ta_acc": 0.524990004,
+   "ta_calls": 2501,
+   "agree_acc": 0.5321243523,
+   "agree_n": 1930
+  },
+  {
+   "month": "2026-03",
+   "candles": 2976,
+   "bull_rate": 0.4989919355,
+   "ml_acc": 0.5440188172,
+   "ta_acc": 0.5426917511,
+   "ta_calls": 2764,
+   "agree_acc": 0.5562157221,
+   "agree_n": 2188
+  },
+  {
+   "month": "2026-04",
+   "candles": 2880,
+   "bull_rate": 0.5100694444,
+   "ml_acc": 0.5423611111,
+   "ta_acc": 0.5366307177,
+   "ta_calls": 2689,
+   "agree_acc": 0.5507177033,
+   "agree_n": 2090
+  },
+  {
+   "month": "2026-05",
+   "candles": 2976,
+   "bull_rate": 0.4926075269,
+   "ml_acc": 0.5349462366,
+   "ta_acc": 0.5190839695,
+   "ta_calls": 2751,
+   "agree_acc": 0.5336692625,
+   "agree_n": 2183
+  },
+  {
+   "month": "2026-06",
+   "candles": 2880,
+   "bull_rate": 0.4753472222,
+   "ml_acc": 0.5215277778,
+   "ta_acc": 0.527037037,
+   "ta_calls": 2700,
+   "agree_acc": 0.5309534568,
+   "agree_n": 2213
+  },
+  {
+   "month": "2026-07",
+   "candles": 2976,
+   "bull_rate": 0.4966397849,
+   "ml_acc": 0.5225134409,
+   "ta_acc": 0.5256732496,
+   "ta_calls": 2785,
+   "agree_acc": 0.5307971014,
+   "agree_n": 2208
+  },
+  {
+   "month": "2026-08",
+   "candles": 2976,
+   "bull_rate": 0.499327957,
+   "ml_acc": 0.5248655914,
+   "ta_acc": 0.5218332732,
+   "ta_calls": 2771,
+   "agree_acc": 0.5281207133,
+   "agree_n": 2187
+  },
+  {
+   "month": "2026-09",
+   "candles": 613,
+   "bull_rate": 0.4975530179,
+   "ml_acc": 0.528548124,
+   "ta_acc": 0.520979021,
+   "ta_calls": 572,
+   "agree_acc": 0.5349887133,
+   "agree_n": 443
+  }
+ ],
+ "by_confidence": [
+  {
+   "bucket": "|p-0.5| 0.00-0.02",
+   "candles": 23007,
+   "share": 0.3640232904,
+   "ml_acc": 0.5094101795
+  },
+  {
+   "bucket": "|p-0.5| 0.02-0.05",
+   "candles": 24169,
+   "share": 0.3824087845,
+   "ml_acc": 0.5269146427
+  },
+  {
+   "bucket": "|p-0.5| 0.05-0.10",
+   "candles": 14329,
+   "share": 0.2267175089,
+   "ml_acc": 0.5588666341
+  },
+  {
+   "bucket": "|p-0.5| 0.10-1.00",
+   "candles": 1697,
+   "share": 0.0268504161,
+   "ml_acc": 0.5763111373
+  }
+ ]
+}

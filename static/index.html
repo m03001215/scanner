@@ -63,8 +63,12 @@
   .up { color: var(--bull); } .down { color: var(--bear); } .flat { color: var(--ink-3); }
   .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
   .pill.inv { background: var(--bear-bg); color: var(--bear); } .pill.keep { background: var(--bull-bg); color: var(--bull); } .pill.off { background: var(--neutral-bg); color: var(--ink-2); }
+  tr.hl td { background: var(--bull-bg); font-weight: 600; }
+  tr.dim td { color: var(--ink-3); }
   .tick { font-weight: 700; } .tick.hit { color: var(--bull); } .tick.miss { color: var(--bear); }
   .scroll { overflow-x: auto; }
+  #btMonthly { display: block; max-height: 420px; overflow-y: auto; }
+  #btMonthly thead th { position: sticky; top: 0; background: var(--surface); }
   .err { background: var(--bear-bg); color: var(--bear); padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
   footer { margin-top: 22px; color: var(--ink-3); font-size: 12px; }
   .span2 { grid-column: 1 / -1; }
@@ -153,6 +157,19 @@
         <thead><tr><th>Candle</th><th class="num">p</th><th>ML</th><th>TA</th><th>Actual</th><th>ML</th><th>TA</th></tr></thead>
         <tbody></tbody></table></div>
     </section>
+    <section class="card span2">
+      <div class="charthead"><h2>Backtest · accuracy when ML and TA agree</h2>
+        <span class="sub" id="btMeta" style="margin:0">–</span></div>
+      <div class="sub">Out-of-sample replay: every call was made before the candle opened by a model trained only on earlier data. Accuracy = share of candles where the call matched the real result.</div>
+      <div class="grid" style="gap:18px">
+        <div class="scroll"><table id="btAgree">
+          <thead><tr><th>Subset</th><th class="num">Candles</th><th class="num">Share</th><th class="num">Accuracy</th></tr></thead>
+          <tbody></tbody></table></div>
+        <div class="scroll"><table id="btMonthly">
+          <thead><tr><th>Month</th><th class="num">Candles</th><th class="num">Real bull %</th><th class="num">ML</th><th class="num">TA</th><th class="num">Agree</th><th class="num">Agree n</th></tr></thead>
+          <tbody></tbody></table></div>
+      </div>
+    </section>
   </div>
   <footer>Data: Binance public klines. Refreshes every 30 s and right after each candle closes. Not financial advice.</footer>
 </div>
@@ -170,7 +187,7 @@ function setInterval_(tf) {
   if (tf === interval) return;
   interval = tf; lastKey = null; nextCloseTs = null;
   try { localStorage.setItem('btcpred.interval', tf); } catch (e) {}
-  syncToggle(); load();
+  syncToggle(); load(); loadBacktest();
 }
 function syncToggle() {
   document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tf === interval)));
@@ -264,6 +281,26 @@ function render(d) {
   }).join('');
 }
 
+async function loadBacktest() {
+  const tf = interval;
+  try {
+    const r = await fetch(`/api/backtest?interval=${tf}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('no summary');
+    const b = await r.json();
+    if (tf !== interval) return;
+    $('btMeta').textContent = `${b.interval} · ${b.test_start} → ${b.test_end} · ${b.candles.toLocaleString()} candles · ML ${pct(b.ml_acc)} · TA ${pct(b.ta_acc)} · agree ${pct(b.agree_acc)} on ${pct(b.agree_share)}`;
+    const cls = s => s === 'ML and TA agree' ? 'hl' : (s.startsWith('Agree,') ? '' : 'dim');
+    $('btAgree').querySelector('tbody').innerHTML = b.agreement.map(a =>
+      `<tr class="${cls(a.subset)}"><td>${a.subset}</td><td class="num">${a.candles.toLocaleString()}</td><td class="num">${pct(a.share)}</td><td class="num">${pct(a.accuracy)}</td></tr>`).join('');
+    const acc = v => v == null ? '–' : (v * 100).toFixed(1);
+    $('btMonthly').querySelector('tbody').innerHTML = b.monthly.slice().reverse().map(m =>
+      `<tr><td>${m.month}</td><td class="num">${m.candles.toLocaleString()}</td><td class="num">${acc(m.bull_rate)}</td><td class="num">${acc(m.ml_acc)}</td><td class="num">${acc(m.ta_acc)}</td><td class="num"><b>${acc(m.agree_acc)}</b></td><td class="num">${m.agree_n.toLocaleString()}</td></tr>`).join('');
+  } catch (e) {
+    $('btMeta').textContent = 'backtest summary not available';
+    $('btAgree').querySelector('tbody').innerHTML = ''; $('btMonthly').querySelector('tbody').innerHTML = '';
+  }
+}
+
 async function load() {
   $('status').textContent = 'refreshing…';
   try {
@@ -287,7 +324,7 @@ function tickClock() {
   if (s === 0 && !tickClock.pending) { tickClock.pending = true; setTimeout(() => { tickClock.pending = false; load(); }, 3000); }
 }
 
-initCharts(); syncToggle(); load();
+initCharts(); syncToggle(); load(); loadBacktest();
 setInterval(load, 30000); setInterval(tickClock, 1000);
 </script>
 </body>

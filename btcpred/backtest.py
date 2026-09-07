@@ -1,6 +1,9 @@
 """Candle-by-candle replay of both predictors over the out-of-sample window."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -59,3 +62,48 @@ def by_confidence(bt: pd.DataFrame) -> pd.DataFrame:
         d = bt[(abs(bt["ml_p"] - 0.5) >= lo) & (abs(bt["ml_p"] - 0.5) < hi)]
         rows.append(dict(bucket=f"|p-0.5| {lo:.2f}-{hi:.2f}", candles=len(d), share=len(d) / len(bt), ml_acc=d["ml_hit"].mean()))
     return pd.DataFrame(rows)
+
+
+def agreement(bt: pd.DataFrame) -> pd.DataFrame:
+    """Accuracy split by whether ML and TA agree, and by confidence within the agreeing set."""
+    n = len(bt)
+    ml_conf = (bt["ml_p"] - 0.5).abs()
+    ta_called = bt["ta_dir"].notna()
+    agree = bt["agree"] & ta_called
+    disagree = ~bt["agree"] & ta_called
+    subsets = [
+        ("All candles (ML call)", pd.Series(True, index=bt.index)),
+        ("ML and TA agree", agree),
+        ("ML and TA disagree", disagree),
+        ("TA has no call (tie)", ~ta_called),
+        ("Agree, ML conf >= 0.02", agree & (ml_conf >= 0.02)),
+        ("Agree, ML conf >= 0.05", agree & (ml_conf >= 0.05)),
+        ("Agree, TA conf >= 0.3", agree & (bt["ta_conf"] >= 0.3)),
+        ("Agree, ML >= 0.05 and TA >= 0.3", agree & (ml_conf >= 0.05) & (bt["ta_conf"] >= 0.3)),
+    ]
+    rows = []
+    for name, m in subsets:
+        d = bt[m]
+        rows.append(dict(subset=name, candles=int(len(d)), share=len(d) / n if n else 0.0,
+                         accuracy=float(d["ml_hit"].mean()) if len(d) else None,
+                         bull_rate=float(d["actual"].mean()) if len(d) else None))
+    return pd.DataFrame(rows)
+
+
+def write_summary(bt: pd.DataFrame, interval: str, step: pd.Timedelta, path: Path) -> dict:
+    """Compact JSON summary committed alongside the model, served by the web app."""
+    def rec(df):
+        return json.loads(df.to_json(orient="records"))
+    both = bt[bt["agree"] & bt["ta_dir"].notna()]
+    summary = dict(
+        interval=interval,
+        test_start=str((bt["open_time"].iloc[0] + step).date()), test_end=str((bt["open_time"].iloc[-1] + step).date()),
+        candles=int(len(bt)), bull_rate=float(bt["actual"].mean()),
+        ml_acc=float(bt["ml_hit"].mean()), ta_acc=float(bt["ta_hit"].mean()),
+        ta_coverage=float(bt["ta_hit"].notna().mean()),
+        agree_acc=float(both["ml_hit"].mean()), agree_share=float(len(both) / len(bt)),
+        agreement=rec(agreement(bt)), monthly=rec(monthly(bt)), by_confidence=rec(by_confidence(bt)),
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(summary, indent=1))
+    return summary

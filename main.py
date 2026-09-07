@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from btcpred import backtest, data, features, model, predictor, ta
-from btcpred.predictor import INTERVALS, cache_path, model_dir, ta_report_path
+from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, model_dir, ta_report_path
 
 
 def cmd_fetch(args):
@@ -90,6 +90,10 @@ def cmd_backtest(args):
     print(f"  {'month':8s} {'n':>6s} {'bull%':>6s} {'ML':>7s} {'TA':>7s} {'agree':>7s} {'agree n':>8s}")
     for r in backtest.monthly(bt).itertuples():
         print(f"  {r.month:8s} {r.candles:6d} {r.bull_rate*100:5.1f}% {pct(r.ml_acc):>7s} {pct(r.ta_acc):>7s} {pct(r.agree_acc):>7s} {r.agree_n:8d}")
+    print("\nAccuracy when ML and TA agree (accuracy = share of candles where the call matched the real result):")
+    print(f"  {'subset':34s} {'n':>6s} {'share':>6s} {'acc':>7s}")
+    for r in backtest.agreement(bt).itertuples():
+        print(f"  {r.subset:34s} {r.candles:6d} {r.share*100:5.1f}% {pct(r.accuracy):>7s}")
     print("\nML accuracy by confidence:")
     for r in backtest.by_confidence(bt).itertuples():
         print(f"  {r.bucket:20s} n={r.candles:6d} ({r.share*100:4.1f}%)  acc={pct(r.ml_acc)}")
@@ -99,7 +103,8 @@ def cmd_backtest(args):
     for r in bt.tail(n).itertuples():
         mh = "✓" if r.ml_hit else "✗"; th = "-" if pd.isna(r.ta_hit) else ("✓" if r.ta_hit else "✗")
         print(f"  {(r.open_time + step):%Y-%m-%d %H:%M} {r.ml_p:6.3f} {lab(r.ml_dir):>5s} {lab(r.ta_dir):>5s} {lab(r.actual):>5s}   {mh}   {th}")
-    print(f"\nfull per-candle table saved to {out}")
+    backtest.write_summary(bt, args.interval, step, backtest_summary_path(args.interval))
+    print(f"\nfull per-candle table saved to {out}; summary -> {backtest_summary_path(args.interval)}")
 
 
 def cmd_predict(args):

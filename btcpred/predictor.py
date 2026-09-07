@@ -32,6 +32,10 @@ def ta_report_path(interval: str) -> Path:
     return ROOT / "models" / interval / "ta_report.json"
 
 
+def backtest_summary_path(interval: str) -> Path:
+    return ROOT / "models" / interval / "backtest_summary.json"
+
+
 def boot_days(interval: str) -> int:
     env = os.environ.get("BTCPRED_BOOT_DAYS")
     return int(env) if env else _BOOT_DAYS.get(interval, 60)

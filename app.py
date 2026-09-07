@@ -51,6 +51,14 @@ def api_predict(interval: str = "15m", recent: int = 96):
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@app.get("/api/backtest")
+def api_backtest(interval: str = "15m"):
+    path = predictor.backtest_summary_path(interval)
+    if interval not in predictor.INTERVALS or not path.exists():
+        raise HTTPException(status_code=404, detail=f"no backtest summary for {interval}")
+    return FileResponse(path, media_type="application/json")
+
+
 @app.get("/api/report")
 def api_report(interval: str = "15m"):
     try:
