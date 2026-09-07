@@ -36,6 +36,30 @@ def backtest_summary_path(interval: str) -> Path:
     return ROOT / "models" / interval / "backtest_summary.json"
 
 
+def history_path(interval: str) -> Path:
+    return ROOT / "models" / interval / "history.csv.gz"
+
+
+_HISTORY: dict = {}
+
+
+def load_history(interval: str) -> pd.DataFrame:
+    """Per-candle backtest history, cached in memory (reloaded if the file changes)."""
+    _check_interval(interval)
+    path = history_path(interval)
+    if not path.exists():
+        raise FileNotFoundError(f"no history for {interval}; run `python main.py backtest --interval {interval}` first")
+    mtime = path.stat().st_mtime
+    hit = _HISTORY.get(interval)
+    if hit is None or hit[0] != mtime:
+        df = pd.read_csv(path, keep_default_na=False, na_values=[""])
+        df["time"] = pd.to_datetime(df["time"], utc=True)
+        df["ta_hit"] = df["ta_hit"].astype("Int64")   # null when TA made no call
+        df["ta_call"] = df["ta_call"].astype(object).where(df["ta_call"].notna(), None)
+        _HISTORY[interval] = (mtime, df)
+    return _HISTORY[interval][1]
+
+
 def boot_days(interval: str) -> int:
     env = os.environ.get("BTCPRED_BOOT_DAYS")
     return int(env) if env else _BOOT_DAYS.get(interval, 60)

@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from btcpred import backtest, data, features, model, predictor, ta
-from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, model_dir, ta_report_path
+from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, history_path, model_dir, ta_report_path
 
 
 def cmd_fetch(args):
@@ -104,7 +104,9 @@ def cmd_backtest(args):
         mh = "✓" if r.ml_hit else "✗"; th = "-" if pd.isna(r.ta_hit) else ("✓" if r.ta_hit else "✗")
         print(f"  {(r.open_time + step):%Y-%m-%d %H:%M} {r.ml_p:6.3f} {lab(r.ml_dir):>5s} {lab(r.ta_dir):>5s} {lab(r.actual):>5s}   {mh}   {th}")
     backtest.write_summary(bt, args.interval, step, backtest_summary_path(args.interval))
-    print(f"\nfull per-candle table saved to {out}; summary -> {backtest_summary_path(args.interval)}")
+    n_hist = backtest.write_history(bt, step, history_path(args.interval))
+    print(f"\nfull per-candle table saved to {out}; summary -> {backtest_summary_path(args.interval)}; "
+          f"history ({n_hist} rows) -> {history_path(args.interval)}")
 
 
 def cmd_predict(args):

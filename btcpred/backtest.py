@@ -116,3 +116,27 @@ def write_summary(bt: pd.DataFrame, interval: str, step: pd.Timedelta, path: Pat
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(summary, indent=1))
     return summary
+
+
+HISTORY_COLUMNS = ["time", "ml_p", "ml_call", "ta_score", "ta_conf", "ta_call", "actual", "ml_hit", "ta_hit"]
+
+
+def write_history(bt: pd.DataFrame, step: pd.Timedelta, path: Path) -> int:
+    """Per-candle out-of-sample results, gzip CSV, small enough to commit and serve from the app.
+
+    `time` is the open of the candle that was predicted (UTC, ISO-8601)."""
+    lab = lambda v: np.where(pd.isna(v), "", np.where(v == 1, "BULL", "BEAR"))
+    h = pd.DataFrame({
+        "time": (bt["open_time"] + step).dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ml_p": bt["ml_p"].round(4),
+        "ml_call": lab(bt["ml_dir"]),
+        "ta_score": bt["ta_score"].astype(int),
+        "ta_conf": bt["ta_conf"].round(3),
+        "ta_call": lab(bt["ta_dir"]),
+        "actual": lab(bt["actual"]),
+        "ml_hit": bt["ml_hit"].astype(int),
+        "ta_hit": bt["ta_hit"].map(lambda v: "" if pd.isna(v) else int(v)),
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    h.to_csv(path, index=False, compression="gzip")
+    return len(h)

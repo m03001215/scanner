@@ -6,8 +6,11 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+import io
+
+import pandas as pd
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from btcpred import predictor
@@ -57,6 +60,57 @@ def api_backtest(interval: str = "15m"):
     if interval not in predictor.INTERVALS or not path.exists():
         raise HTTPException(status_code=404, detail=f"no backtest summary for {interval}")
     return FileResponse(path, media_type="application/json")
+
+
+@app.get("/api/history")
+def api_history(
+    interval: str = "15m",
+    start: str | None = Query(None, description="ISO date/time, inclusive (UTC unless offset given), e.g. 2025-01-01"),
+    end: str | None = Query(None, description="ISO date/time, exclusive"),
+    limit: int = Query(1000, ge=1, le=20000),
+    offset: int = Query(0, ge=0),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
+):
+    """Per-candle out-of-sample backtest results: ML probability/call, TA score/call, real outcome.
+
+    `time` is the open of the predicted candle (UTC). These are replayed backtest calls from
+    models trained only on earlier data, not a log of what the live site showed at the time.
+    """
+    try:
+        df = predictor.load_history(interval)
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    try:
+        if start:
+            df = df[df["time"] >= pd.Timestamp(start).tz_localize("UTC") if pd.Timestamp(start).tzinfo is None else pd.Timestamp(start)]
+        if end:
+            df = df[df["time"] < (pd.Timestamp(end).tz_localize("UTC") if pd.Timestamp(end).tzinfo is None else pd.Timestamp(end))]
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=f"bad start/end: {e}")
+    if order == "desc":
+        df = df.iloc[::-1]
+    total = len(df)
+    if format == "csv":  # whole filtered range, ignores paging
+        buf = io.StringIO()
+        out = df.copy(); out["time"] = out["time"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        out.to_csv(buf, index=False)
+        fname = f"btcusdt_{interval}_history.csv"
+        return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
+                                 headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+    page = df.iloc[offset: offset + limit].copy()
+    page["time"] = page["time"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    page = page.astype(object).where(page.notna(), None)
+    rows = page.to_dict(orient="records")
+    summary = dict(
+        ml_acc=round(float(df["ml_hit"].mean()), 4) if total else None,
+        ta_acc=round(float(df["ta_hit"].mean()), 4) if total and df["ta_hit"].notna().any() else None,
+        ta_calls=int(df["ta_hit"].notna().sum()),
+    )
+    return dict(interval=interval, total=total, offset=offset, returned=len(rows),
+                next_offset=(offset + limit) if offset + limit < total else None,
+                range=dict(start=rows[0]["time"] if rows else None, end=rows[-1]["time"] if rows else None),
+                summary=summary, rows=rows)
 
 
 @app.get("/api/report")
