@@ -56,18 +56,25 @@ def monthly(bt: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def ml_confidence(bt: pd.DataFrame) -> pd.Series:
+    """ML confidence on the dashboard scale: 2 * |P(bullish) - 0.5|, so 0.10 means P >= 0.55 or <= 0.45."""
+    return (bt["ml_p"] - 0.5).abs() * 2
+
+
 def by_confidence(bt: pd.DataFrame) -> pd.DataFrame:
+    conf = ml_confidence(bt)
     rows = []
-    for lo, hi in ((0.0, 0.02), (0.02, 0.05), (0.05, 0.10), (0.10, 1.0)):
-        d = bt[(abs(bt["ml_p"] - 0.5) >= lo) & (abs(bt["ml_p"] - 0.5) < hi)]
-        rows.append(dict(bucket=f"|p-0.5| {lo:.2f}-{hi:.2f}", candles=len(d), share=len(d) / len(bt), ml_acc=d["ml_hit"].mean()))
+    for lo, hi in ((0.0, 0.05), (0.05, 0.10), (0.10, 0.20), (0.20, 1.0)):
+        d = bt[(conf >= lo) & (conf < hi)]
+        label = f"ML conf {lo:.2f}-{hi:.2f}" if hi < 1 else f"ML conf >= {lo:.2f}"
+        rows.append(dict(bucket=label, candles=len(d), share=len(d) / len(bt), ml_acc=d["ml_hit"].mean()))
     return pd.DataFrame(rows)
 
 
 def agreement(bt: pd.DataFrame) -> pd.DataFrame:
     """Accuracy split by whether ML and TA agree, and by confidence within the agreeing set."""
     n = len(bt)
-    ml_conf = (bt["ml_p"] - 0.5).abs()
+    ml_conf = ml_confidence(bt)
     ta_called = bt["ta_dir"].notna()
     agree = bt["agree"] & ta_called
     disagree = ~bt["agree"] & ta_called
@@ -76,10 +83,12 @@ def agreement(bt: pd.DataFrame) -> pd.DataFrame:
         ("ML and TA agree", agree),
         ("ML and TA disagree", disagree),
         ("TA has no call (tie)", ~ta_called),
-        ("Agree, ML conf >= 0.02", agree & (ml_conf >= 0.02)),
         ("Agree, ML conf >= 0.05", agree & (ml_conf >= 0.05)),
+        ("Agree, ML conf >= 0.10", agree & (ml_conf >= 0.10)),
+        ("Agree, ML conf >= 0.20", agree & (ml_conf >= 0.20)),
         ("Agree, TA conf >= 0.3", agree & (bt["ta_conf"] >= 0.3)),
-        ("Agree, ML >= 0.05 and TA >= 0.3", agree & (ml_conf >= 0.05) & (bt["ta_conf"] >= 0.3)),
+        ("Agree, ML >= 0.10 and TA >= 0.3", agree & (ml_conf >= 0.10) & (bt["ta_conf"] >= 0.3)),
+        ("Agree, ML >= 0.20 and TA >= 0.3", agree & (ml_conf >= 0.20) & (bt["ta_conf"] >= 0.3)),
     ]
     rows = []
     for name, m in subsets:

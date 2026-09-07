@@ -90,11 +90,11 @@ def cmd_backtest(args):
     print(f"  {'month':8s} {'n':>6s} {'bull%':>6s} {'ML':>7s} {'TA':>7s} {'agree':>7s} {'agree n':>8s}")
     for r in backtest.monthly(bt).itertuples():
         print(f"  {r.month:8s} {r.candles:6d} {r.bull_rate*100:5.1f}% {pct(r.ml_acc):>7s} {pct(r.ta_acc):>7s} {pct(r.agree_acc):>7s} {r.agree_n:8d}")
-    print("\nAccuracy when ML and TA agree (accuracy = share of candles where the call matched the real result):")
+    print("\nAccuracy when ML and TA agree (ML conf on the dashboard scale = 2*|p-0.5|; TA conf = |score|/16):")
     print(f"  {'subset':34s} {'n':>6s} {'share':>6s} {'acc':>7s}")
     for r in backtest.agreement(bt).itertuples():
         print(f"  {r.subset:34s} {r.candles:6d} {r.share*100:5.1f}% {pct(r.accuracy):>7s}")
-    print("\nML accuracy by confidence:")
+    print("\nML accuracy by confidence (dashboard scale):")
     for r in backtest.by_confidence(bt).itertuples():
         print(f"  {r.bucket:20s} n={r.candles:6d} ({r.share*100:4.1f}%)  acc={pct(r.ml_acc)}")
     n = args.rows
