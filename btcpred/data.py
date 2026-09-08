@@ -86,20 +86,35 @@ def _to_frame(rows: list) -> pd.DataFrame:
     return df
 
 
+def _closed_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only candles whose close_time has passed. A still-forming candle must never be cached:
+    its high/low/close/volume are partial and would be frozen into history."""
+    if df.empty:
+        return df
+    now = pd.Timestamp.now(tz="UTC")
+    return df[df["close_time"] <= now].reset_index(drop=True)
+
+
 def load_or_update(cache: Path, symbol: str = "BTCUSDT", interval: str = "15m",
-                   days: int = 730) -> pd.DataFrame:
-    """Load cached klines and append anything newer from Binance."""
+                   days: int = 730, rebuild: bool = False) -> pd.DataFrame:
+    """Load cached klines and append anything newer from Binance.
+
+    Only closed candles are stored. The last two cached candles are re-downloaded on every
+    update so a bar that was cached seconds after it closed is replaced by Binance's final
+    version (late trades can still adjust it briefly)."""
     now_ms = int(time.time() * 1000)
-    if cache.exists():
+    if cache.exists() and not rebuild:
         df = pd.read_parquet(cache)
-        start = int(df["open_time"].iloc[-1].timestamp() * 1000) + INTERVAL_MS[interval]
+        df = df.iloc[:-2] if len(df) > 2 else df.iloc[:0]
+        start = (int(df["open_time"].iloc[-1].timestamp() * 1000) + INTERVAL_MS[interval]
+                 if not df.empty else now_ms - days * 86_400_000)
     else:
         df = pd.DataFrame()
         start = now_ms - days * 86_400_000
     if start <= now_ms:
-        new = fetch_klines(symbol, interval, start_ms=start, end_ms=now_ms)
+        new = _closed_only(fetch_klines(symbol, interval, start_ms=start, end_ms=now_ms))
         df = pd.concat([df, new], ignore_index=True) if not df.empty else new
-        df = df.drop_duplicates("open_time").sort_values("open_time").reset_index(drop=True)
+        df = df.drop_duplicates("open_time", keep="last").sort_values("open_time").reset_index(drop=True)
     cache.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache, index=False)
     return df

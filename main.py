@@ -15,8 +15,18 @@ from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, hist
 
 
 def cmd_fetch(args):
-    df = data.load_or_update(cache_path(args.interval), interval=args.interval, days=args.days)
+    df = data.load_or_update(cache_path(args.interval), interval=args.interval, days=args.days, rebuild=args.rebuild)
     print(f"{len(df)} candles cached: {df['open_time'].iloc[0]} -> {df['open_time'].iloc[-1]}")
+    if args.verify:
+        import time as _t
+        tail = df.tail(args.verify)
+        live = data.fetch_klines("BTCUSDT", args.interval, start_ms=int(tail["open_time"].iloc[0].timestamp() * 1000),
+                                 end_ms=int(_t.time() * 1000))
+        m = tail.merge(live, on="open_time", suffixes=("_c", "_l"))
+        bad = m[(m["close_c"] != m["close_l"]) | (m["high_c"] != m["high_l"]) | (m["low_c"] != m["low_l"]) | (m["volume_c"] != m["volume_l"])]
+        print(f"verified last {len(m)} candles against Binance: {len(bad)} mismatch(es)")
+        for r in bad.itertuples():
+            print(f"  {r.open_time}: close {r.close_c} vs {r.close_l}, vol {r.volume_c} vs {r.volume_l}")
 
 
 def cmd_train(args):
@@ -165,6 +175,8 @@ def main():
         sp.add_argument("--interval", "-i", choices=INTERVALS, default="15m", help="candle timeframe (default 15m)")
         return sp
     s = add("fetch", "download / update cached klines"); s.add_argument("--days", type=int, default=730)
+    s.add_argument("--rebuild", action="store_true", help="discard the cache and download everything again")
+    s.add_argument("--verify", type=int, metavar="N", default=0, help="compare the last N cached candles with Binance")
     s = add("train", "walk-forward evaluate and train final ML model")
     s.add_argument("--days", type=int, default=730); s.add_argument("--folds", type=int, default=5)
     s = add("backtest-ta", "calibrate and evaluate the rule-based TA predictor"); s.add_argument("--days", type=int, default=730)
