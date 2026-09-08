@@ -64,18 +64,18 @@ def api_backtest(interval: str = "15m"):
 
 @app.get("/api/llm")
 def api_llm(interval: str = "15m"):
-    """Claude's call for the candle forming now, with its reasoning. One API call per closed candle."""
+    """The LLM's call for the candle forming now, with its reasoning. One API call per closed candle."""
     if interval not in predictor.INTERVALS:
         raise HTTPException(status_code=404, detail=f"unsupported interval {interval!r}")
     if not llm.available():
-        raise HTTPException(status_code=503, detail="Claude predictor not configured: set ANTHROPIC_API_KEY on the server")
+        raise HTTPException(status_code=503, detail="LLM predictor not configured: set OPENAI_API_KEY (or ANTHROPIC_API_KEY) on the server")
     df = data.drop_open_candle(data.load_or_update(predictor.cache_path(interval), interval=interval,
                                                    days=predictor.boot_days(interval)))
     try:
         out = llm.predict(df, interval)
     except Exception as e:  # noqa: BLE001 - surface SDK/auth/rate-limit errors to the UI as text
         log.warning("llm predict failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"Claude call failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=502, detail=f"LLM call failed: {type(e).__name__}: {e}")
     out = dict(out, interval=interval, track_record=llm.track_record(interval, df))
     return out
 

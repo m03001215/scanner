@@ -1,5 +1,6 @@
-"""Third predictor: Claude reads the recent candles and indicators and gives a call with a reason.
+"""Third predictor: an LLM reads the recent candles and indicators and gives a call with a reason.
 
+Providers: OpenAI (OPENAI_API_KEY) or Anthropic (ANTHROPIC_API_KEY); BTCPRED_LLM_PROVIDER overrides.
 Independent of the ML and TA methods: the prompt contains only market data, never their calls.
 One API call per closed candle per timeframe; results are cached in memory and appended to a
 JSONL log so a running hit rate can be shown once outcomes are known.
@@ -19,9 +20,24 @@ from . import data
 from .features import _atr, _rsi
 
 ROOT = Path(__file__).resolve().parent.parent
-MODEL = os.environ.get("BTCPRED_LLM_MODEL", "claude-opus-5")
-EFFORT = os.environ.get("BTCPRED_LLM_EFFORT", "medium")   # low | medium | high | xhigh | max
+DEFAULT_MODEL = {"openai": "gpt-5", "anthropic": "claude-opus-5"}
+EFFORT = os.environ.get("BTCPRED_LLM_EFFORT", "medium")   # low | medium | high (OpenAI); + xhigh | max (Anthropic)
 N_CANDLES = int(os.environ.get("BTCPRED_LLM_CANDLES", "48"))
+
+
+def provider() -> str | None:
+    forced = os.environ.get("BTCPRED_LLM_PROVIDER", "").strip().lower()
+    if forced in ("openai", "anthropic"):
+        return forced
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return "anthropic"
+    return None
+
+
+def model_name() -> str:
+    return os.environ.get("BTCPRED_LLM_MODEL") or DEFAULT_MODEL.get(provider() or "openai", "gpt-5")
 
 _CACHE: dict = {}
 
@@ -47,11 +63,11 @@ Guidance from the historical record on this exact task:
 - Order-flow (taker buy ratio, volume spikes) is informative mainly when it diverges from price.
 
 Be honest about uncertainty. Keep confidence low unless several independent signals line up.
-Cite concrete numbers from the data in your reason. Never mention that you are an AI."""
+Cite concrete numbers from the data in your reason. Never mention that you are an AI or a language model."""
 
 
 def available() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    return provider() is not None
 
 
 def log_path(interval: str) -> Path:
@@ -104,19 +120,61 @@ def _streak(body: pd.Series) -> str:
 
 def predict(df: pd.DataFrame, interval: str) -> dict:
     """Return Claude's call for the candle after df's last (closed) row. Cached per candle."""
-    if not available():
-        raise RuntimeError("Claude predictor not configured: set ANTHROPIC_API_KEY")
+    prov = provider()
+    if prov is None:
+        raise RuntimeError("LLM predictor not configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY")
     last_bar = df.iloc[-1]
     key = (interval, str(last_bar["open_time"]))
     if key in _CACHE:
         return _CACHE[key]
 
-    import anthropic  # imported lazily so the rest of the app works without the SDK configured
-    client = anthropic.Anthropic()
     context = build_context(df, interval)
+    model = model_name()
     t0 = time.time()
+    call, usage = (_call_openai if prov == "openai" else _call_anthropic)(model, context)
+    direction = "BULLISH" if call.direction.strip().lower().startswith("bull") else "BEARISH"
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
+    out = dict(
+        prediction=direction, confidence=round(float(call.confidence), 3),
+        reason=call.reason.strip(), key_factors=[k.strip() for k in call.key_factors][:6],
+        provider=prov, model=model, effort=EFFORT,
+        last_closed_candle=str(last_bar["open_time"]),
+        predicting_candle_open=str((last_bar["close_time"] + pd.Timedelta(milliseconds=1)).floor(step)),
+        latency_s=round(time.time() - t0, 1),
+        usage=usage,
+    )
+    for k in [k for k in _CACHE if k[0] == interval and k != key]:
+        del _CACHE[k]
+    _CACHE[key] = out
+    _append_log(interval, out)
+    return out
+
+
+def _call_openai(model: str, context: str) -> tuple[CandleCall, dict]:
+    """OpenAI Responses API with a Pydantic-enforced JSON schema."""
+    from openai import OpenAI  # lazy import: the app must run without either SDK configured
+    client = OpenAI()
+    kwargs: dict = {}
+    if model.startswith(("gpt-5", "o1", "o3", "o4")):   # reasoning models accept an effort knob
+        kwargs["reasoning"] = {"effort": EFFORT if EFFORT in ("low", "medium", "high") else "medium"}
+    response = client.responses.parse(
+        model=model,
+        input=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": context}],
+        text_format=CandleCall,
+        **kwargs,
+    )
+    if response.output_parsed is None:
+        raise RuntimeError(f"{model} returned no structured prediction (status={response.status})")
+    u = response.usage
+    cached = getattr(getattr(u, "input_tokens_details", None), "cached_tokens", 0) or 0
+    return response.output_parsed, dict(input_tokens=u.input_tokens, output_tokens=u.output_tokens, cache_read_input_tokens=cached)
+
+
+def _call_anthropic(model: str, context: str) -> tuple[CandleCall, dict]:
+    import anthropic
+    client = anthropic.Anthropic()
     response = client.messages.parse(
-        model=MODEL,
+        model=model,
         max_tokens=4000,
         system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
         output_config={"effort": EFFORT},
@@ -124,25 +182,10 @@ def predict(df: pd.DataFrame, interval: str) -> dict:
         output_format=CandleCall,
     )
     if response.stop_reason == "refusal" or response.parsed_output is None:
-        raise RuntimeError(f"Claude returned no prediction (stop_reason={response.stop_reason})")
-    call: CandleCall = response.parsed_output
-    direction = "BULLISH" if call.direction.strip().lower().startswith("bull") else "BEARISH"
-    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
-    out = dict(
-        prediction=direction, confidence=round(float(call.confidence), 3),
-        reason=call.reason.strip(), key_factors=[k.strip() for k in call.key_factors][:6],
-        model=MODEL, effort=EFFORT,
-        last_closed_candle=str(last_bar["open_time"]),
-        predicting_candle_open=str((last_bar["close_time"] + pd.Timedelta(milliseconds=1)).floor(step)),
-        latency_s=round(time.time() - t0, 1),
-        usage=dict(input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens,
-                   cache_read_input_tokens=getattr(response.usage, "cache_read_input_tokens", 0) or 0),
-    )
-    for k in [k for k in _CACHE if k[0] == interval and k != key]:
-        del _CACHE[k]
-    _CACHE[key] = out
-    _append_log(interval, out)
-    return out
+        raise RuntimeError(f"{model} returned no prediction (stop_reason={response.stop_reason})")
+    u = response.usage
+    return response.parsed_output, dict(input_tokens=u.input_tokens, output_tokens=u.output_tokens,
+                                        cache_read_input_tokens=getattr(u, "cache_read_input_tokens", 0) or 0)
 
 
 def _append_log(interval: str, out: dict) -> None:

@@ -150,9 +150,9 @@ def cmd_predict(args):
     else:
         print("Agreement          : " + ("YES, both methods agree" if out["agreement"] else "NO, methods disagree"))
     if args.llm:
-        print("\n[3] Claude")
+        print("\n[3] LLM")
         if not llm.available():
-            print("    not configured: set ANTHROPIC_API_KEY"); return
+            print("    not configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY"); return
         df = data.drop_open_candle(pd.read_parquet(cache_path(args.interval)))
         try:
             r = llm.predict(df, args.interval)
@@ -184,7 +184,7 @@ def main():
     s.add_argument("--days", type=int, default=730); s.add_argument("--folds", type=int, default=5)
     s.add_argument("--rows", type=int, default=20, help="how many recent candles to print")
     s = add("predict", "predict direction of the next candle (ML + TA, optionally Claude)")
-    s.add_argument("--json", action="store_true"); s.add_argument("--llm", action="store_true", help="also ask Claude (needs ANTHROPIC_API_KEY)")
+    s.add_argument("--json", action="store_true"); s.add_argument("--llm", action="store_true", help="also ask the LLM (needs OPENAI_API_KEY or ANTHROPIC_API_KEY)")
     args = ap.parse_args()
     {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest, "predict": cmd_predict}[args.cmd](args)
 

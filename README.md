@@ -8,9 +8,9 @@ methods on multi-year public kline data:
 2. **TA** - a vote of 18 classic technical-analysis signals (EMA, MACD, RSI,
    Stochastic, Bollinger, VWAP, candlestick patterns, support/resistance,
    volume and taker-flow), with per-signal weights calibrated on history.
-3. **Claude** (optional) - Claude reads the last 48 closed candles plus an indicator
-   snapshot and returns a call, a confidence, and a written reason. Needs
-   `ANTHROPIC_API_KEY`.
+3. **LLM analyst** (optional) - a language model (OpenAI GPT-5 by default, or Claude)
+   reads the last 48 closed candles plus an indicator snapshot and returns a call, a
+   confidence, and a written reason. Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
 `predict` prints both results and whether they agree. A web dashboard shows the
 same plus a candlestick chart, the ML probability history, the TA signal
@@ -121,25 +121,26 @@ is reachable from outside. For HTTPS, point a domain at the VPS, change
 Without any server changes, an SSH tunnel also works from your own machine:
 `ssh -L 8765:127.0.0.1:8765 developer@<vps-ip>` then open `http://localhost:8765`.
 
-## Claude predictor
+## LLM analyst
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-proj-...                # or ANTHROPIC_API_KEY=sk-ant-...
 .venv/bin/python main.py predict -i 1h --llm     # CLI
 .venv/bin/python app.py                          # dashboard card 3 becomes active
 ```
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | unset | Enables the predictor. On Render, set it in the service's Environment tab. |
-| `BTCPRED_LLM_MODEL` | `claude-opus-5` | Any current Claude model id |
-| `BTCPRED_LLM_EFFORT` | `medium` | `low`, `medium`, `high`, `xhigh`, `max` - thinking depth per call |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | unset | Enables the analyst; OpenAI is used when both are set. On Render, set it in the service's Environment tab. |
+| `BTCPRED_LLM_PROVIDER` | auto | Force `openai` or `anthropic` |
+| `BTCPRED_LLM_MODEL` | `gpt-5` (OpenAI) / `claude-opus-5` (Anthropic) | Model id |
+| `BTCPRED_LLM_EFFORT` | `medium` | Reasoning depth: `low`, `medium`, `high` (Anthropic also `xhigh`, `max`). GPT-5 at medium takes ~30 s per call; `low` is several times faster. |
 | `BTCPRED_LLM_CANDLES` | `48` | Closed candles included in the prompt |
 
 The prompt contains only market data (candle table + RSI, EMAs, MACD, Bollinger,
 Stochastic, ATR, range, volume, taker flow), never the ML or TA calls, so the three
-methods stay independent. The system prompt is cached, so repeat calls cost mostly
-the ~1.3k-token market brief plus output. Calls happen lazily, once per closed candle
+methods stay independent. Structured output (a JSON schema) guarantees a parseable
+call every time. The prompt is ~1.6k tokens. Calls happen lazily, once per closed candle
 per timeframe, only when the dashboard or API is hit. Each call is appended to
 `data/llm_log_<tf>.jsonl` so the card can show a running hit rate; there is no
 historical backtest for this method because that would mean tens of thousands of
