@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import predictor
+from btcpred import data, llm, predictor
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -60,6 +60,24 @@ def api_backtest(interval: str = "15m"):
     if interval not in predictor.INTERVALS or not path.exists():
         raise HTTPException(status_code=404, detail=f"no backtest summary for {interval}")
     return FileResponse(path, media_type="application/json")
+
+
+@app.get("/api/llm")
+def api_llm(interval: str = "15m"):
+    """Claude's call for the candle forming now, with its reasoning. One API call per closed candle."""
+    if interval not in predictor.INTERVALS:
+        raise HTTPException(status_code=404, detail=f"unsupported interval {interval!r}")
+    if not llm.available():
+        raise HTTPException(status_code=503, detail="Claude predictor not configured: set ANTHROPIC_API_KEY on the server")
+    df = data.drop_open_candle(data.load_or_update(predictor.cache_path(interval), interval=interval,
+                                                   days=predictor.boot_days(interval)))
+    try:
+        out = llm.predict(df, interval)
+    except Exception as e:  # noqa: BLE001 - surface SDK/auth/rate-limit errors to the UI as text
+        log.warning("llm predict failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Claude call failed: {type(e).__name__}: {e}")
+    out = dict(out, interval=interval, track_record=llm.track_record(interval, df))
+    return out
 
 
 @app.get("/api/history")

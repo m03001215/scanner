@@ -3,3 +3,4 @@ data/*.parquet
 __pycache__/
 *.pyc
 models/*/backtest.csv
+data/llm_log_*.jsonl

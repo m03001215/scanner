@@ -13,3 +13,9 @@ services:
         value: "45"
       - key: BINANCE_BASE_URLS
         value: "https://api.binance.com,https://data-api.binance.vision"
+      - key: ANTHROPIC_API_KEY   # set the value in the Render dashboard; enables the Claude predictor
+        sync: false
+      - key: BTCPRED_LLM_MODEL
+        value: "claude-opus-5"
+      - key: BTCPRED_LLM_EFFORT
+        value: "medium"

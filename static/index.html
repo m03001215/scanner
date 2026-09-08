@@ -72,6 +72,11 @@
   .err { background: var(--bear-bg); color: var(--bear); padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
   footer { margin-top: 22px; color: var(--ink-3); font-size: 12px; }
   .span2 { grid-column: 1 / -1; }
+  .reason { margin: 0 0 8px; max-width: 78ch; line-height: 1.55; }
+  .factors { margin: 0; padding-left: 18px; max-width: 78ch; color: var(--ink-2); }
+  .factors li { margin: 2px 0; }
+  .off { color: var(--ink-2); background: var(--neutral-bg); border-radius: 8px; padding: 12px 14px; max-width: 78ch; }
+  .off code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
   .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
   .seg button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-weight: 600; padding: 6px 14px; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--border); }
@@ -126,6 +131,20 @@
         <dt>Textbook vote (equal weights)</dt><dd id="taBook">–</dd>
         <dt>Hit rate, last <span id="nRecent2">–</span> calls</dt><dd id="taRecent">–</dd>
       </dl>
+    </section>
+
+    <section class="card span2" id="llmCard">
+      <div class="charthead"><h2>3 · Claude</h2><span class="sub" id="llmMeta" style="margin:0">–</span></div>
+      <div class="sub">Reads the last 48 closed candles and an indicator snapshot, then gives a call with its reasoning. Independent of the two methods above.</div>
+      <div id="llmBody">
+        <div class="verdict"><span id="llmBadge" class="badge NEUTRAL">…</span>
+          <div><div style="font-size:26px;font-weight:600;font-variant-numeric:tabular-nums"><span id="llmConf">–</span></div>
+               <div class="sub" style="margin:0">confidence</div></div></div>
+        <p id="llmReason" class="reason">Loading Claude's analysis…</p>
+        <ul id="llmFactors" class="factors"></ul>
+        <div class="sub" id="llmTrack" style="margin:8px 0 0"></div>
+      </div>
+      <div id="llmOff" class="off" hidden></div>
     </section>
 
     <section class="card span2" style="padding:12px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -194,7 +213,7 @@ let interval = '15m';
 try { const saved = localStorage.getItem('btcpred.interval'); if (saved === '15m' || saved === '1h') interval = saved; } catch (e) {}
 function setInterval_(tf) {
   if (tf === interval) return;
-  interval = tf; lastKey = null; nextCloseTs = null;
+  interval = tf; lastKey = null; nextCloseTs = null; llmKey = null;
   try { localStorage.setItem('btcpred.interval', tf); } catch (e) {}
   syncToggle(); load(); loadBacktest();
 }
@@ -292,6 +311,35 @@ function render(d) {
   }).join('');
 }
 
+let llmKey = null;
+async function loadLLM(force) {
+  const tf = interval;
+  if (!force && llmKey === tf + '|' + lastKey) return;   // one call per closed candle per timeframe
+  $('llmOff').hidden = true; $('llmBody').hidden = false;
+  $('llmMeta').textContent = 'asking Claude…';
+  try {
+    const r = await fetch(`/api/llm?interval=${tf}`, { cache: 'no-store' });
+    const d = await r.json();
+    if (tf !== interval) return;
+    if (!r.ok) throw Object.assign(new Error(d.detail || r.statusText), { status: r.status });
+    llmKey = tf + '|' + lastKey;
+    $('llmBadge').className = 'badge ' + d.prediction; $('llmBadge').textContent = d.prediction;
+    $('llmConf').textContent = pct(d.confidence);
+    $('llmReason').textContent = d.reason;
+    $('llmFactors').innerHTML = d.key_factors.map(f => `<li>${f.replace(/</g, '&lt;')}</li>`).join('');
+    const agreeMl = d.prediction === $('mlBadge').textContent, agreeTa = d.prediction === $('taBadge').textContent;
+    $('llmMeta').textContent = `${d.model} · effort ${d.effort} · ${d.latency_s}s · for the candle opening ${fmtHM(parseApi(d.predicting_candle_open))} ET · ` +
+      (agreeMl && agreeTa ? 'agrees with ML and TA' : agreeMl ? 'agrees with ML, not TA' : agreeTa ? 'agrees with TA, not ML' : 'disagrees with ML and TA');
+    const t = d.track_record;
+    $('llmTrack').textContent = t.resolved ? `Track record on this server: ${pct(t.hit_rate)} on ${t.resolved} resolved calls (${t.calls} made).` : `Track record: ${t.calls} call(s) made, none resolved yet.`;
+  } catch (e) {
+    $('llmBody').hidden = true; $('llmOff').hidden = false; $('llmMeta').textContent = '';
+    $('llmOff').innerHTML = e.status === 503
+      ? 'Not configured. Set <code>ANTHROPIC_API_KEY</code> on the server to enable the Claude predictor.'
+      : 'Claude call failed: ' + String(e.message).replace(/</g, '&lt;');
+  }
+}
+
 async function loadBacktest() {
   const tf = interval;
   try {
@@ -320,7 +368,7 @@ async function load() {
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const d = await r.json();
     if (tf !== interval) return;  // user switched while this request was in flight
-    if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); }
+    if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); loadLLM(); }
     $('status').textContent = 'updated ' + new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()) + ' ET';
   } catch (e) {
     $('error').hidden = false; $('error').textContent = 'Could not load prediction: ' + e.message;

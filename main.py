@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from btcpred import backtest, data, features, model, predictor, ta
+from btcpred import backtest, data, features, llm, model, predictor, ta
 from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, history_path, model_dir, ta_report_path
 
 
@@ -139,6 +139,22 @@ def cmd_predict(args):
         print("Agreement          : TA has no call (tie); only the ML prediction applies")
     else:
         print("Agreement          : " + ("YES, both methods agree" if out["agreement"] else "NO, methods disagree"))
+    if args.llm:
+        print("\n[3] Claude")
+        if not llm.available():
+            print("    not configured: set ANTHROPIC_API_KEY"); return
+        df = data.drop_open_candle(pd.read_parquet(cache_path(args.interval)))
+        try:
+            r = llm.predict(df, args.interval)
+        except Exception as e:  # noqa: BLE001
+            print(f"    call failed: {e}"); return
+        print(f"    Prediction  : {r['prediction']}  (confidence {r['confidence']:.0%}, {r['model']}, effort {r['effort']}, {r['latency_s']}s)")
+        print(f"    Reason      : {r['reason']}")
+        for k in r["key_factors"]:
+            print(f"      - {k}")
+        tr = llm.track_record(args.interval, df)
+        if tr["resolved"]:
+            print(f"    Track record: {tr['hit_rate']:.1%} on {tr['resolved']} resolved calls")
 
 
 def main():
@@ -155,7 +171,8 @@ def main():
     s = add("backtest", "replay ML + TA candle by candle over the out-of-sample window")
     s.add_argument("--days", type=int, default=730); s.add_argument("--folds", type=int, default=5)
     s.add_argument("--rows", type=int, default=20, help="how many recent candles to print")
-    s = add("predict", "predict direction of the next candle (ML + TA)"); s.add_argument("--json", action="store_true")
+    s = add("predict", "predict direction of the next candle (ML + TA, optionally Claude)")
+    s.add_argument("--json", action="store_true"); s.add_argument("--llm", action="store_true", help="also ask Claude (needs ANTHROPIC_API_KEY)")
     args = ap.parse_args()
     {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest, "predict": cmd_predict}[args.cmd](args)
 

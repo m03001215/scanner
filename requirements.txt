@@ -6,3 +6,4 @@ requests
 pyarrow
 fastapi
 uvicorn[standard]
+anthropic
