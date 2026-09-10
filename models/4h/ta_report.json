@@ -1,7 +1,7 @@
 {
   "calib_start": "2017-08-17 04:00:00+00:00",
   "test_start": "2021-04-04 04:00:00+00:00",
-  "test_end": "2026-09-10 04:00:00+00:00",
+  "test_end": "2026-09-10 08:00:00+00:00",
   "weights": {
     "ema_8_20": 0.0,
     "ema_50_200": 0.0,
@@ -23,69 +23,69 @@
     "near_sr": 0.0
   },
   "textbook_oos": {
-    "n": 11911,
-    "n_called": 11193,
-    "coverage": 0.9397195869364453,
-    "accuracy": 0.4725274725274725,
-    "acc_conf_20": 0.45564653701808255,
-    "coverage_conf_20": 0.49215011334060954,
+    "n": 11912,
+    "n_called": 11194,
+    "coverage": 0.9397246474143721,
+    "accuracy": 0.4725745935322494,
+    "acc_conf_20": 0.4557393825686509,
+    "coverage_conf_20": 0.4921927468099396,
     "acc_conf_30": 0.44740288083806196,
-    "coverage_conf_30": 0.1923432121568298,
+    "coverage_conf_30": 0.1923270651443922,
     "acc_conf_40": 0.4466501240694789,
-    "coverage_conf_40": 0.033834270842078754
+    "coverage_conf_40": 0.033831430490261924
   },
   "calibrated_oos": {
-    "n": 11911,
-    "n_called": 10322,
-    "coverage": 0.866593904793888,
-    "accuracy": 0.5395272234063166,
-    "acc_conf_20": 0.5526701877934272,
-    "coverage_conf_20": 0.5722441440685081,
-    "acc_conf_30": 0.5501647199760408,
-    "coverage_conf_30": 0.280329107547645,
+    "n": 11912,
+    "n_called": 10323,
+    "coverage": 0.8666051040967092,
+    "accuracy": 0.5394749588297976,
+    "acc_conf_20": 0.5525891154466774,
+    "coverage_conf_20": 0.5722800537273338,
+    "acc_conf_30": 0.55,
+    "coverage_conf_30": 0.28038952316991267,
     "acc_conf_40": 0.5372393247269116,
-    "coverage_conf_40": 0.08454369910167073
+    "coverage_conf_40": 0.08453660174613835
   },
   "per_signal": {
     "ema_8_20": {
       "acc_calib": 0.5120292228240333,
       "coverage_calib": 0.9998740554156171,
-      "acc_test": 0.4913945092771388,
+      "acc_test": 0.4914372061786434,
       "coverage_test": 1.0,
       "weight": 0.0
     },
     "ema_50_200": {
       "acc_calib": 0.5141705504471596,
       "coverage_calib": 0.9998740554156171,
-      "acc_test": 0.5025606582150953,
+      "acc_test": 0.5025184687709873,
       "coverage_test": 1.0,
       "weight": 0.0
     },
     "price_vs_ema20": {
       "acc_calib": 0.49628416677163373,
       "coverage_calib": 0.9998740554156171,
-      "acc_test": 0.4793048442616069,
+      "acc_test": 0.4793485560779046,
       "coverage_test": 1.0,
       "weight": 0.0
     },
     "macd_hist": {
       "acc_calib": 0.49439476004534577,
       "coverage_calib": 0.9998740554156171,
-      "acc_test": 0.491730333305348,
+      "acc_test": 0.49177300201477503,
       "coverage_test": 1.0,
       "weight": 0.0
     },
     "macd_hist_rising": {
       "acc_calib": 0.46743922408363775,
       "coverage_calib": 0.9998740554156171,
-      "acc_test": 0.48031231634623456,
+      "acc_test": 0.4803559435862995,
       "coverage_test": 1.0,
       "weight": -1.0
     },
     "roc_4": {
       "acc_calib": 0.4824804638265692,
       "coverage_calib": 0.9992443324937028,
-      "acc_test": 0.4712450675845857,
+      "acc_test": 0.47128945601074546,
       "coverage_test": 1.0,
       "weight": 0.0
     },
@@ -93,34 +93,34 @@
       "acc_calib": 0.5158862876254181,
       "coverage_calib": 0.15062972292191434,
       "acc_test": 0.509447165850245,
-      "coverage_test": 0.11997313407774327,
+      "coverage_test": 0.11996306245802552,
       "weight": 0.0
     },
     "stoch_cross": {
       "acc_calib": 0.46814903846153844,
       "coverage_calib": 0.41914357682619646,
       "acc_test": 0.4671201814058957,
-      "coverage_test": 0.4072705902107296,
+      "coverage_test": 0.40723640026863667,
       "weight": -1.0
     },
     "stoch_extreme": {
       "acc_calib": 0.5302721088435374,
       "coverage_calib": 0.3702770780856423,
-      "acc_test": 0.5475974614687217,
-      "coverage_test": 0.37041390311476785,
+      "acc_test": 0.5474733741219125,
+      "coverage_test": 0.37046675621222297,
       "weight": 1.0
     },
     "bollinger": {
       "acc_calib": 0.4945705824284304,
       "coverage_calib": 0.12758186397984886,
       "acc_test": 0.5125936010891763,
-      "coverage_test": 0.12333137435983545,
+      "coverage_test": 0.12332102081934183,
       "weight": 0.0
     },
     "vwap": {
       "acc_calib": 0.4928706624605678,
       "coverage_calib": 0.9981108312342569,
-      "acc_test": 0.48224330450843755,
+      "acc_test": 0.4822867696440564,
       "coverage_test": 1.0,
       "weight": 0.0
     },
@@ -128,49 +128,49 @@
       "acc_calib": 0.4591078066914498,
       "coverage_calib": 0.1355163727959698,
       "acc_test": 0.48634453781512604,
-      "coverage_test": 0.15985223742758795,
+      "coverage_test": 0.15983881799865682,
       "weight": -1.0
     },
     "taker_flow": {
       "acc_calib": 0.4777506112469438,
       "coverage_calib": 0.2575566750629723,
-      "acc_test": 0.4548704200178731,
-      "coverage_test": 0.18789354378305767,
+      "acc_test": 0.4551138901295221,
+      "coverage_test": 0.187961719274681,
       "weight": -1.0
     },
     "engulfing": {
       "acc_calib": 0.4375,
       "coverage_calib": 0.08866498740554156,
       "acc_test": 0.46419098143236076,
-      "coverage_test": 0.06330282931743766,
+      "coverage_test": 0.06329751511081262,
       "weight": -1.0
     },
     "hammer_star": {
       "acc_calib": 0.46810035842293907,
       "coverage_calib": 0.1756926952141058,
       "acc_test": 0.4626191670847968,
-      "coverage_test": 0.16732432205524306,
+      "coverage_test": 0.16731027535258564,
       "weight": -1.0
     },
     "three_soldiers_crows": {
       "acc_calib": 0.439453125,
       "coverage_calib": 0.19345088161209067,
       "acc_test": 0.43255432554325546,
-      "coverage_test": 0.2047687012005709,
+      "coverage_test": 0.2047515110812626,
       "weight": -1.0
     },
     "breakout_96": {
       "acc_calib": 0.5260115606936416,
       "coverage_calib": 0.04357682619647355,
       "acc_test": 0.4413793103448276,
-      "coverage_test": 0.0365208630677525,
+      "coverage_test": 0.03651779717931498,
       "weight": 1.0
     },
     "near_sr": {
       "acc_calib": 0.49166666666666664,
       "coverage_calib": 0.04534005037783375,
       "acc_test": 0.5610687022900763,
-      "coverage_test": 0.043992947695407604,
+      "coverage_test": 0.04398925453324379,
       "weight": 0.0
     }
   }

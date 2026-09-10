@@ -51,6 +51,19 @@ For each timeframe both methods are evaluated on the same window (the newest 60%
 history). The ML model uses 5 expanding walk-forward folds; the TA weights are
 calibrated on the oldest 40% and frozen.
 
+**Summary across timeframes** (ML confidence on the dashboard scale, 2·|p−0.5|)
+
+| Timeframe | Test window | Candles | ML | ML conf ≥ 0.10 | ML conf ≥ 0.20 | TA calibrated | Agree, ML ≥ 0.10 & TA ≥ 0.3 |
+|---|---|---|---|---|---|---|---|
+| 5m | Jun 2025 – Sep 2026 | 126k | 51.6% | 55.1% (4% of candles) | 57.5% (0.05%) | 52.2% (53% coverage) | 54.9% (3%) |
+| 15m | Nov 2024 – Sep 2026 | 63k | 52.9% | 56.1% (25%) | 58.4% (2%) | 52.4% (93%) | 56.7% (20%) |
+| 1h | May 2023 – Sep 2026 | 29k | 53.7% | 56.6% (41%) | 60.7% (8%) | 52.8% (95%) | 57.3% (26%) |
+| 4h | Apr 2021 – Sep 2026 | 12k | 54.3% | 57.0% (51%) | 59.7% (16%) | 54.0% (87%) | 57.0% (15%) |
+
+The edge grows with the timeframe. 5m is almost pure noise; the model is confident
+on fewer than 4% of candles. 4h has the strongest signal but far fewer candles, so its
+monthly accuracy swings widely (44% to 64%).
+
 **15m** - test window Nov 2024 - Sep 2026, ~63k candles
 
 | Method | Accuracy | Coverage | Confident subset |
