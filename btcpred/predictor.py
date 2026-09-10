@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import data, features, model, ta
+from . import data, features, llm, model, ta
 
 ROOT = Path(__file__).resolve().parent.parent
 INTERVALS = ("5m", "15m", "1h", "4h")
@@ -110,6 +110,7 @@ def predict(interval: str = "15m", recent: int = 96, refresh: bool = True) -> di
     p_hist = booster.predict(tail.fillna(0))
     p = float(p_hist[-1])
 
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
     ta_rep = _ta_report(interval)
     weights = ta_rep["weights"] if ta_rep else None
     sig = ta.signals(df)
@@ -119,16 +120,17 @@ def predict(interval: str = "15m", recent: int = 96, refresh: bool = True) -> di
     ta_book = ta.predict_last(df)
 
     ml_dir = "BULLISH" if p >= 0.5 else "BEARISH"
-    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
     next_open = (last_bar["close_time"] + pd.Timedelta(milliseconds=1)).floor(step)
     next_close = next_open + step
 
     # Recent history: candles + what each method said about the *following* candle + outcome
+    llm_log = llm.load_log(interval)
     rows = []
     idx = df.index[-recent:]
     for j, i in enumerate(idx):
         r = df.loc[i]
         nxt = df.loc[i + 1] if i + 1 in df.index else None
+        llm_call = llm_log.get(str((r["close_time"] + pd.Timedelta(milliseconds=1)).floor(step)))
         rows.append(dict(
             time=int(r["open_time"].timestamp()),
             open=float(r["open"]), high=float(r["high"]), low=float(r["low"]), close=float(r["close"]),
@@ -136,10 +138,13 @@ def predict(interval: str = "15m", recent: int = 96, refresh: bool = True) -> di
             ml_p=round(float(p_hist[j]), 4),
             ta_score=float(agg_w.loc[i, "score"]),
             ta_dir=None if np.isnan(agg_w.loc[i, "direction"]) else int(agg_w.loc[i, "direction"]),
+            llm_dir=None if llm_call is None else int(llm_call["prediction"] == "BULLISH"),
+            llm_conf=None if llm_call is None else llm_call.get("confidence"),
             actual=None if nxt is None else int(nxt["close"] > nxt["open"]),
         ))
     hits_ml = [(r["ml_p"] >= 0.5) == bool(r["actual"]) for r in rows if r["actual"] is not None]
     hits_ta = [(r["ta_dir"] == r["actual"]) for r in rows if r["actual"] is not None and r["ta_dir"] is not None]
+    hits_llm = [(r["llm_dir"] == r["actual"]) for r in rows if r["actual"] is not None and r["llm_dir"] is not None]
 
     last_sig = sig.iloc[-1]
     signal_table = [
@@ -170,6 +175,8 @@ def predict(interval: str = "15m", recent: int = 96, refresh: bool = True) -> di
                 recent_hit_rate=round(float(np.mean(hits_ta)), 4) if hits_ta else None,
                 recent_calls=len(hits_ta)),
         agreement=(ml_dir == ta_res["prediction"]),
+        llm_recent=dict(calls=sum(1 for r in rows if r["llm_dir"] is not None), resolved=len(hits_llm),
+                        hit_rate=round(float(np.mean(hits_llm)), 4) if hits_llm else None),
         recent=rows,
     )
     for k in [k for k in _CACHE if k[0] == interval and k[1] != key]:  # drop stale candles

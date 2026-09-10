@@ -181,9 +181,9 @@
 
     <section class="card">
       <h2>Recent predictions vs outcome</h2>
-      <div class="sub">What each method said before the candle, and what happened</div>
+      <div class="sub">What each method said before the candle, and what happened. LLM shows only candles it was actually asked about. <span id="llmRecent"></span></div>
       <div class="scroll"><table id="recentTable">
-        <thead><tr><th>Candle ET</th><th class="num">p</th><th>ML</th><th>TA</th><th>Actual</th><th>ML</th><th>TA</th></tr></thead>
+        <thead><tr><th>Candle ET</th><th class="num">p</th><th>ML</th><th>TA</th><th>LLM</th><th>Actual</th><th>ML</th><th>TA</th><th>LLM</th></tr></thead>
         <tbody></tbody></table></div>
     </section>
     <section class="card span2">
@@ -301,6 +301,8 @@ function render(d) {
   const rec = d.recent;
   ['nRecent1', 'nRecent3'].forEach(id => $(id).textContent = rec.length);
   $('nRecent2').textContent = t.recent_calls;
+  const lr = d.llm_recent || {};
+  $('llmRecent').textContent = lr.calls ? `LLM: ${lr.calls} call(s) in this window` + (lr.resolved ? `, ${pct(lr.hit_rate)} on ${lr.resolved} resolved.` : '.') : '';
   candles.setData(rec.map(r => ({ time: r.time, open: r.open, high: r.high, low: r.low, close: r.close })));
   probLine.setData(rec.map(r => ({ time: r.time, value: r.ml_p })));
   priceChart.timeScale().fitContent();
@@ -317,8 +319,9 @@ function render(d) {
   const step = d.interval_seconds || 900;  // label each row with the candle being predicted (the following one)
   $('recentTable').querySelector('tbody').innerHTML = rec.slice(-16).reverse().map(r => {
     const mlCall = r.ml_p >= 0.5 ? 1 : 0;
-    return `<tr><td>${fmtT(r.time + step)}</td><td class="num">${r.ml_p.toFixed(3)}</td><td>${dirTxt(mlCall)}</td><td>${dirTxt(r.ta_dir)}</td>
-      <td>${r.actual == null ? '<span class="flat">forming…</span>' : dirTxt(r.actual)}</td><td>${tick(mlCall, r.actual)}</td><td>${tick(r.ta_dir, r.actual)}</td></tr>`;
+    const llmTxt = r.llm_dir == null ? '<span class="flat">–</span>' : dirTxt(r.llm_dir);
+    return `<tr><td>${fmtT(r.time + step)}</td><td class="num">${r.ml_p.toFixed(3)}</td><td>${dirTxt(mlCall)}</td><td>${dirTxt(r.ta_dir)}</td><td title="${r.llm_conf == null ? '' : 'confidence ' + pct(r.llm_conf)}">${llmTxt}</td>
+      <td>${r.actual == null ? '<span class="flat">forming…</span>' : dirTxt(r.actual)}</td><td>${tick(mlCall, r.actual)}</td><td>${tick(r.ta_dir, r.actual)}</td><td>${tick(r.llm_dir, r.actual)}</td></tr>`;
   }).join('');
 }
 

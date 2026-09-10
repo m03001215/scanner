@@ -195,20 +195,26 @@ def _append_log(interval: str, out: dict) -> None:
         f.write(json.dumps({k: out[k] for k in ("predicting_candle_open", "prediction", "confidence", "model")}) + "\n")
 
 
-def track_record(interval: str, df: pd.DataFrame) -> dict:
-    """Hit rate of logged Claude calls whose candle has since closed."""
+def load_log(interval: str) -> dict[str, dict]:
+    """Logged live calls keyed by the predicted candle's open time (first call per candle wins)."""
     p = log_path(interval)
+    out: dict[str, dict] = {}
     if not p.exists():
-        return dict(calls=0, resolved=0, hit_rate=None)
-    seen, rows = set(), []
+        return out
     for line in p.read_text().splitlines():
         try:
             r = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if r["predicting_candle_open"] in seen:
-            continue
-        seen.add(r["predicting_candle_open"]); rows.append(r)
+        out.setdefault(r["predicting_candle_open"], r)
+    return out
+
+
+def track_record(interval: str, df: pd.DataFrame) -> dict:
+    """Hit rate of logged live calls whose candle has since closed."""
+    rows = list(load_log(interval).values())
+    if not rows:
+        return dict(calls=0, resolved=0, hit_rate=None)
     outcome = {str(t): int(cl > op) for t, op, cl in zip(df["open_time"], df["open"], df["close"])}
     hits = [(r["prediction"] == "BULLISH") == bool(outcome[r["predicting_candle_open"]])
             for r in rows if r["predicting_candle_open"] in outcome]
