@@ -72,6 +72,10 @@
   .err { background: var(--bear-bg); color: var(--bear); padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
   footer { margin-top: 22px; color: var(--ink-3); font-size: 12px; }
   .span2 { grid-column: 1 / -1; }
+  .askrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; }
+  .btn { border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; padding: 9px 16px; cursor: pointer; }
+  .btn:hover { filter: brightness(1.08); } .btn:disabled { opacity: .55; cursor: default; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .reason { margin: 0 0 8px; max-width: 78ch; line-height: 1.55; }
   .factors { margin: 0; padding-left: 18px; max-width: 78ch; color: var(--ink-2); }
   .factors li { margin: 2px 0; }
@@ -139,8 +143,12 @@
 
     <section class="card span2" id="llmCard">
       <div class="charthead"><h2>3 · LLM analyst</h2><span class="sub" id="llmMeta" style="margin:0">–</span></div>
-      <div class="sub">A language model reads the last 48 closed candles and an indicator snapshot, then gives a call with its reasoning. Independent of the two methods above.</div>
-      <div id="llmBody">
+      <div class="sub">A language model reads the last 48 closed candles and an indicator snapshot, then gives a call with its reasoning. Independent of the two methods above. Runs only when you ask: one paid API call per click, cached for the rest of the candle.</div>
+      <div class="askrow">
+        <button type="button" id="llmAsk" class="btn">Ask the model</button>
+        <span class="sub" id="llmState" style="margin:0"></span>
+      </div>
+      <div id="llmBody" hidden>
         <div class="verdict"><span id="llmBadge" class="badge NEUTRAL">…</span>
           <div><div style="font-size:26px;font-weight:600;font-variant-numeric:tabular-nums"><span id="llmConf">–</span></div>
                <div class="sub" style="margin:0">confidence</div></div></div>
@@ -218,9 +226,9 @@ const INTERVALS = ['5m', '15m', '1h', '4h'];
 try { const saved = localStorage.getItem('btcpred.interval'); if (INTERVALS.includes(saved)) interval = saved; } catch (e) {}
 function setInterval_(tf) {
   if (tf === interval) return;
-  interval = tf; lastKey = null; nextCloseTs = null; llmKey = null;
+  interval = tf; lastKey = null; nextCloseTs = null;
   try { localStorage.setItem('btcpred.interval', tf); } catch (e) {}
-  syncToggle(); load(); loadBacktest();
+  syncToggle(); llmIdle(); load(); loadBacktest();
 }
 function syncToggle() {
   document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tf === interval)));
@@ -316,18 +324,29 @@ function render(d) {
   }).join('');
 }
 
-let llmKey = null;
-async function loadLLM(force) {
-  const tf = interval;
-  if (!force && llmKey === tf + '|' + lastKey) return;   // one call per closed candle per timeframe
-  $('llmOff').hidden = true; $('llmBody').hidden = false;
-  $('llmMeta').textContent = 'thinking…';
+let llmKey = null;   // interval|candle of the result currently shown
+function llmIdle() {
+  $('llmBody').hidden = true; $('llmOff').hidden = true; $('llmMeta').textContent = '';
+  $('llmAsk').disabled = false; $('llmAsk').textContent = 'Ask the model';
+  $('llmState').textContent = 'No call made for this candle.';
+}
+function llmRefreshState() {   // called after each data refresh: mark a shown result as stale once its candle has closed
+  if (!llmKey) { llmIdle(); return; }
+  const [tf, cand] = llmKey.split('|');
+  if (tf !== interval) { llmIdle(); return; }
+  if (cand !== lastKey) { $('llmAsk').disabled = false; $('llmAsk').textContent = 'Ask for the new candle'; $('llmState').textContent = 'The candle this result was for has closed.'; }
+}
+async function askLLM() {
+  const tf = interval, btn = $('llmAsk');
+  btn.disabled = true; btn.textContent = 'Thinking…'; $('llmState').textContent = 'Reasoning models take 10–40 s.';
+  $('llmOff').hidden = true; $('llmMeta').textContent = '';
   try {
     const r = await fetch(`/api/llm?interval=${tf}`, { cache: 'no-store' });
     const d = await r.json();
     if (tf !== interval) return;
     if (!r.ok) throw Object.assign(new Error(d.detail || r.statusText), { status: r.status });
     llmKey = tf + '|' + lastKey;
+    $('llmBody').hidden = false;
     $('llmBadge').className = 'badge ' + d.prediction; $('llmBadge').textContent = d.prediction;
     $('llmConf').textContent = pct(d.confidence);
     $('llmReason').textContent = d.reason;
@@ -337,13 +356,17 @@ async function loadLLM(force) {
       (agreeMl && agreeTa ? 'agrees with ML and TA' : agreeMl ? 'agrees with ML, not TA' : agreeTa ? 'agrees with TA, not ML' : 'disagrees with ML and TA');
     const t = d.track_record;
     $('llmTrack').textContent = t.resolved ? `Track record on this server: ${pct(t.hit_rate)} on ${t.resolved} resolved calls (${t.calls} made).` : `Track record: ${t.calls} call(s) made, none resolved yet.`;
+    btn.textContent = 'Ask again'; btn.disabled = false;
+    $('llmState').textContent = d.latency_s < 2 ? 'Served from cache, no new API call.' : `Called ${d.provider} · ${d.usage.input_tokens + d.usage.output_tokens} tokens.`;
   } catch (e) {
-    $('llmBody').hidden = true; $('llmOff').hidden = false; $('llmMeta').textContent = '';
+    $('llmBody').hidden = true; $('llmOff').hidden = false;
     $('llmOff').innerHTML = e.status === 503
       ? 'Not configured. Set <code>OPENAI_API_KEY</code> (or <code>ANTHROPIC_API_KEY</code>) on the server to enable the LLM analyst.'
       : 'LLM call failed: ' + String(e.message).replace(/</g, '&lt;');
+    btn.textContent = 'Ask the model'; btn.disabled = false; $('llmState').textContent = '';
   }
 }
+$('llmAsk').addEventListener('click', askLLM);
 
 async function loadBacktest() {
   const tf = interval;
@@ -373,7 +396,7 @@ async function load() {
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const d = await r.json();
     if (tf !== interval) return;  // user switched while this request was in flight
-    if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); loadLLM(); }
+    if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); llmRefreshState(); }
     $('status').textContent = 'updated ' + new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()) + ' ET';
   } catch (e) {
     $('error').hidden = false; $('error').textContent = 'Could not load prediction: ' + e.message;
@@ -388,7 +411,7 @@ function tickClock() {
   if (s === 0 && !tickClock.pending) { tickClock.pending = true; setTimeout(() => { tickClock.pending = false; load(); }, 3000); }
 }
 
-initCharts(); syncToggle(); load(); loadBacktest();
+initCharts(); syncToggle(); llmIdle(); load(); loadBacktest();
 setInterval(load, 30000); setInterval(tickClock, 1000);
 </script>
 </body>

@@ -179,7 +179,9 @@ export OPENAI_API_KEY=sk-proj-...                # or ANTHROPIC_API_KEY=sk-ant-.
 The prompt contains only market data (candle table + RSI, EMAs, MACD, Bollinger,
 Stochastic, ATR, range, volume, taker flow), never the ML or TA calls, so the three
 methods stay independent. Structured output (a JSON schema) guarantees a parseable
-call every time. The prompt is ~1.6k tokens. Calls happen lazily, once per closed candle
+call every time. The prompt is ~1.6k tokens. The dashboard never calls the model on
+its own: card 3 has an "Ask the model" button, and each click makes at most one API
+call per candle per timeframe (repeat clicks on the same candle are served from cache). Calls happen lazily, once per closed candle
 per timeframe, only when the dashboard or API is hit. Each call is appended to
 `data/llm_log_<tf>.jsonl` so the card can show a running hit rate. For a small
 point-in-time replay, `main.py backtest-llm -i 1h --n 24` re-asks the model for each of
