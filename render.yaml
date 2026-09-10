@@ -9,8 +9,6 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      - key: BTCPRED_BOOT_DAYS
-        value: "45"
       - key: BINANCE_BASE_URLS
         value: "https://api.binance.com,https://data-api.binance.vision"
       - key: OPENAI_API_KEY      # set the value in the Render dashboard; enables the LLM analyst (OpenAI)

@@ -1,8 +1,8 @@
-# BTCUSDT Next-Candle Predictor (15m / 1h)
+# BTCUSDT Next-Candle Predictor (5m / 15m / 1h / 4h)
 
-Predicts whether the **next** Binance BTCUSDT candle, on the **15-minute or 1-hour**
-timeframe, will close bullish (close > open) or bearish, using two independent
-methods on multi-year public kline data:
+Predicts whether the **next** Binance BTCUSDT candle, on the **5-minute, 15-minute,
+1-hour or 4-hour** timeframe, will close bullish (close > open) or bearish, using
+independent methods on multi-year public kline data:
 
 1. **ML** - a LightGBM classifier over 50 engineered features.
 2. **TA** - a vote of 18 classic technical-analysis signals (EMA, MACD, RSI,
@@ -74,6 +74,32 @@ ML AUC 0.542, log loss 0.6906 (coin flip = 0.6931). Every ML fold scored between
 ML AUC 0.553, log loss 0.6888. ML folds ranged 52.3% - 54.7%. The 1h edge is slightly
 larger than 15m, and the same mean-reversion pattern holds: every trend-following
 signal is inverted by calibration on both timeframes.
+
+**5m** - test window Jun 2025 - Sep 2026, ~126k candles
+
+| Method | Accuracy | Coverage | Confident subset |
+|---|---|---|---|
+| ML (LightGBM) | **51.6%** | 100% | 54.9% on the 5% of candles with \|p-0.5\| >= 0.05 |
+| TA, calibrated weights | **52.2%** | 54% (many ties) | 54.5% on the 10% with confidence >= 0.4 |
+| TA, textbook vote | 48.5% | 94% | |
+| Majority-class baseline | 50.3% | 100% | |
+
+ML AUC 0.523. Five-minute candles are the noisiest timeframe: the edge is real but
+tiny, and the model is rarely confident.
+
+**4h** - test window Apr 2021 - Sep 2026, ~11.9k candles
+
+| Method | Accuracy | Coverage | Confident subset |
+|---|---|---|---|
+| ML (LightGBM) | **54.4%** | 100% | 56.7% on the 51% with \|p-0.5\| >= 0.05; 59.6% on the 16% with >= 0.10 |
+| TA, calibrated weights | **54.0%** | 87% | 55.3% on the 57% with confidence >= 0.2 |
+| TA, textbook vote | 47.3% | 94% | |
+| Majority-class baseline | 50.8% | 100% | |
+
+ML AUC 0.561. The 4h timeframe has the largest edge, but also the fewest candles, so
+its numbers carry wider error bars (about +/-1 point on the overall figure).
+
+The edge grows with the timeframe: 51.6% (5m) -> 52.9% (15m) -> 53.7% (1h) -> 54.4% (4h).
 
 ### Why textbook TA loses on 15m BTC
 

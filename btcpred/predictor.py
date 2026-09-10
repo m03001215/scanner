@@ -11,10 +11,10 @@ import pandas as pd
 from . import data, features, model, ta
 
 ROOT = Path(__file__).resolve().parent.parent
-INTERVALS = ("15m", "1h")
+INTERVALS = ("5m", "15m", "1h", "4h")
 # Days of history to download when no cache exists (features need ~300 bars of warm-up
-# plus the `recent` window). Override with BTCPRED_BOOT_DAYS.
-_BOOT_DAYS = {"15m": 45, "1h": 150}
+# plus the `recent` window of up to 500 bars). Override with BTCPRED_BOOT_DAYS.
+_BOOT_DAYS = {"5m": 15, "15m": 45, "1h": 150, "4h": 500}
 
 _CACHE: dict = {}
 _MODELS: dict = {}

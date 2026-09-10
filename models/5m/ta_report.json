@@ -1,0 +1,177 @@
+{
+  "calib_start": "2024-09-10 15:15:00+00:00",
+  "test_start": "2025-06-29 15:10:00+00:00",
+  "test_end": "2026-09-10 15:05:00+00:00",
+  "weights": {
+    "ema_8_20": 0.0,
+    "ema_50_200": 0.0,
+    "price_vs_ema20": 0.0,
+    "macd_hist": 0.0,
+    "macd_hist_rising": 0.0,
+    "roc_4": 0.0,
+    "rsi_extreme": 1.0,
+    "stoch_cross": 0.0,
+    "stoch_extreme": 1.0,
+    "bollinger": 1.0,
+    "vwap": 0.0,
+    "volume_confirm": 0.0,
+    "taker_flow": 0.0,
+    "engulfing": 0.0,
+    "hammer_star": 0.0,
+    "three_soldiers_crows": -1.0,
+    "breakout_96": -1.0,
+    "near_sr": 1.0
+  },
+  "textbook_oos": {
+    "n": 126144,
+    "n_called": 118695,
+    "coverage": 0.9409484398782344,
+    "accuracy": 0.4851004675849867,
+    "acc_conf_20": 0.4804678430462039,
+    "coverage_conf_20": 0.5462962962962963,
+    "acc_conf_30": 0.47658195565423506,
+    "coverage_conf_30": 0.26421391425672247,
+    "acc_conf_40": 0.47288649376894576,
+    "coverage_conf_40": 0.0706097792998478
+  },
+  "calibrated_oos": {
+    "n": 126144,
+    "n_called": 67448,
+    "coverage": 0.5346905124302385,
+    "accuracy": 0.5215425216463053,
+    "acc_conf_20": 0.5328619967738614,
+    "coverage_conf_20": 0.23098205225773719,
+    "acc_conf_30": 0.5328619967738614,
+    "coverage_conf_30": 0.23098205225773719,
+    "acc_conf_40": 0.5452804595866911,
+    "coverage_conf_40": 0.09935470573313039
+  },
+  "per_signal": {
+    "ema_8_20": {
+      "acc_calib": 0.4879896306514139,
+      "coverage_calib": 0.9999881086866045,
+      "acc_test": 0.4872447361745307,
+      "coverage_test": 1.0,
+      "weight": 0.0
+    },
+    "ema_50_200": {
+      "acc_calib": 0.4953861155373748,
+      "coverage_calib": 0.9999881086866045,
+      "acc_test": 0.4970747716894977,
+      "coverage_test": 1.0,
+      "weight": 0.0
+    },
+    "price_vs_ema20": {
+      "acc_calib": 0.48737127500178373,
+      "coverage_calib": 0.9999881086866045,
+      "acc_test": 0.48735572044647385,
+      "coverage_test": 1.0,
+      "weight": 0.0
+    },
+    "macd_hist": {
+      "acc_calib": 0.4888101410326539,
+      "coverage_calib": 0.9999881086866045,
+      "acc_test": 0.49097063673262303,
+      "coverage_test": 1.0,
+      "weight": 0.0
+    },
+    "macd_hist_rising": {
+      "acc_calib": 0.4970390277546555,
+      "coverage_calib": 0.9999881086866045,
+      "acc_test": 0.4940068493150685,
+      "coverage_test": 1.0,
+      "weight": 0.0
+    },
+    "roc_4": {
+      "acc_calib": 0.49054830535695165,
+      "coverage_calib": 0.9995719127177597,
+      "acc_test": 0.4883291165343464,
+      "coverage_test": 0.9995164256722476,
+      "weight": 0.0
+    },
+    "rsi_extreme": {
+      "acc_calib": 0.5512842613342527,
+      "coverage_calib": 0.0689815090076699,
+      "acc_test": 0.5365726227795193,
+      "coverage_test": 0.07586567732115677,
+      "weight": 1.0
+    },
+    "stoch_cross": {
+      "acc_calib": 0.5128159328391534,
+      "coverage_calib": 0.39944110827040846,
+      "acc_test": 0.49875705322968866,
+      "coverage_test": 0.40181062912227294,
+      "weight": 0.0
+    },
+    "stoch_extreme": {
+      "acc_calib": 0.5246362433862434,
+      "coverage_calib": 0.431511980498246,
+      "acc_test": 0.5243868320432715,
+      "coverage_test": 0.42503012430238457,
+      "weight": 1.0
+    },
+    "bollinger": {
+      "acc_calib": 0.5455177206393329,
+      "coverage_calib": 0.10266959985730424,
+      "acc_test": 0.5447686503964894,
+      "coverage_test": 0.10296962201927955,
+      "weight": 1.0
+    },
+    "vwap": {
+      "acc_calib": 0.4881779257849667,
+      "coverage_calib": 0.9998216302990666,
+      "acc_test": 0.48771245560629123,
+      "coverage_test": 1.0,
+      "weight": 0.0
+    },
+    "volume_confirm": {
+      "acc_calib": 0.48308609455150425,
+      "coverage_calib": 0.17154408704441407,
+      "acc_test": 0.47519153593578983,
+      "coverage_test": 0.17383307965499747,
+      "weight": 0.0
+    },
+    "taker_flow": {
+      "acc_calib": 0.4931493845520995,
+      "coverage_calib": 0.7516023544800523,
+      "acc_test": 0.4887172189469404,
+      "coverage_test": 0.77990233384069,
+      "weight": 0.0
+    },
+    "engulfing": {
+      "acc_calib": 0.507001647446458,
+      "coverage_calib": 0.057744217848861405,
+      "acc_test": 0.5009620670698186,
+      "coverage_test": 0.05768011161846778,
+      "weight": 0.0
+    },
+    "hammer_star": {
+      "acc_calib": 0.5185832274459975,
+      "coverage_calib": 0.1497354182769487,
+      "acc_test": 0.4856062808956092,
+      "coverage_test": 0.1635749619482496,
+      "weight": 0.0
+    },
+    "three_soldiers_crows": {
+      "acc_calib": 0.4758450530471256,
+      "coverage_calib": 0.2409774659611154,
+      "acc_test": 0.47720262840284294,
+      "coverage_test": 0.23645991882293252,
+      "weight": -1.0
+    },
+    "breakout_96": {
+      "acc_calib": 0.44906816441153946,
+      "coverage_calib": 0.046578274570426306,
+      "acc_test": 0.45416187188339086,
+      "coverage_test": 0.04133371385083714,
+      "weight": -1.0
+    },
+    "near_sr": {
+      "acc_calib": 0.5260287555775904,
+      "coverage_calib": 0.047969558237707356,
+      "acc_test": 0.5277108433734939,
+      "coverage_test": 0.042768581938102485,
+      "weight": 1.0
+    }
+  }
+}
