@@ -213,3 +213,36 @@ def track_record(interval: str, df: pd.DataFrame) -> dict:
     hits = [(r["prediction"] == "BULLISH") == bool(outcome[r["predicting_candle_open"]])
             for r in rows if r["predicting_candle_open"] in outcome]
     return dict(calls=len(rows), resolved=len(hits), hit_rate=round(float(np.mean(hits)), 4) if hits else None)
+
+
+def replay(df: pd.DataFrame, interval: str, n: int, workers: int = 4) -> pd.DataFrame:
+    """Point-in-time replay over the last n closed candles: for each target candle the model sees only
+    the candles before it. Costs one API call per candle. Returns one row per candle with the outcome."""
+    from concurrent.futures import ThreadPoolExecutor
+    prov = provider()
+    if prov is None:
+        raise RuntimeError("LLM predictor not configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY")
+    model = model_name()
+    fn = _call_openai if prov == "openai" else _call_anthropic
+    targets = list(range(len(df) - n, len(df)))          # index of each predicted candle
+
+    def one(i):
+        hist = df.iloc[:i]                                  # strictly before the target candle
+        t0 = time.time()
+        try:
+            call, usage = fn(model, build_context(hist, interval))
+            pred = "BULLISH" if call.direction.strip().lower().startswith("bull") else "BEARISH"
+            return dict(candle=df["open_time"].iloc[i], prediction=pred, confidence=float(call.confidence),
+                        reason=call.reason.strip(), actual="BULLISH" if df["close"].iloc[i] > df["open"].iloc[i] else "BEARISH",
+                        latency_s=round(time.time() - t0, 1), error=None)
+        except Exception as e:  # noqa: BLE001
+            return dict(candle=df["open_time"].iloc[i], prediction=None, confidence=None, reason=None,
+                        actual="BULLISH" if df["close"].iloc[i] > df["open"].iloc[i] else "BEARISH",
+                        latency_s=round(time.time() - t0, 1), error=f"{type(e).__name__}: {e}")
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        rows = list(ex.map(one, targets))
+    out = pd.DataFrame(rows)
+    out["hit"] = (out["prediction"] == out["actual"]).where(out["prediction"].notna())
+    out["model"] = model
+    return out

@@ -142,9 +142,11 @@ Stochastic, ATR, range, volume, taker flow), never the ML or TA calls, so the th
 methods stay independent. Structured output (a JSON schema) guarantees a parseable
 call every time. The prompt is ~1.6k tokens. Calls happen lazily, once per closed candle
 per timeframe, only when the dashboard or API is hit. Each call is appended to
-`data/llm_log_<tf>.jsonl` so the card can show a running hit rate; there is no
-historical backtest for this method because that would mean tens of thousands of
-paid calls.
+`data/llm_log_<tf>.jsonl` so the card can show a running hit rate. For a small
+point-in-time replay, `main.py backtest-llm -i 1h --n 24` re-asks the model for each of
+the last N closed candles using only the candles before it (one paid call each) and
+writes `models/<tf>/llm_replay.csv`; a full multi-year backtest is not offered because
+it would mean tens of thousands of paid calls.
 
 ## Deploying to a free platform (Render)
 

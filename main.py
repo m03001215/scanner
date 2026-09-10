@@ -119,6 +119,25 @@ def cmd_backtest(args):
           f"history ({n_hist} rows) -> {history_path(args.interval)}")
 
 
+def cmd_backtest_llm(args):
+    """Replay the LLM analyst over the last N closed candles (one paid API call each)."""
+    if not llm.available():
+        sys.exit("not configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY")
+    df = data.drop_open_candle(data.load_or_update(cache_path(args.interval), interval=args.interval, days=730))
+    print(f"[{args.interval}] replaying {llm.provider()} {llm.model_name()} over the last {args.n} closed candles "
+          f"({args.workers} parallel calls)...")
+    rep = llm.replay(df, args.interval, args.n, workers=args.workers)
+    out = ta_report_path(args.interval).parent / "llm_replay.csv"
+    rep.to_csv(out, index=False)
+    ok = rep[rep["hit"].notna()]
+    print(f"done: {len(ok)} calls ok, {int(rep['error'].notna().sum())} failed; accuracy {ok['hit'].mean()*100:.1f}% ({int(ok['hit'].sum())}/{len(ok)})")
+    for r in rep.itertuples():
+        if r.error:
+            print(f"  {r.candle:%m-%d %H:%M} UTC  ERROR {r.error[:80]}"); continue
+        print(f"  {r.candle:%m-%d %H:%M} UTC  {r.prediction:7s} conf {r.confidence:.2f}  real {r.actual:7s}  {'hit ' if r.hit else 'MISS'}  {r.latency_s:5.1f}s")
+    print(f"saved to {out}")
+
+
 def cmd_predict(args):
     try:
         out = predictor.predict(interval=args.interval)
@@ -183,10 +202,13 @@ def main():
     s = add("backtest", "replay ML + TA candle by candle over the out-of-sample window")
     s.add_argument("--days", type=int, default=730); s.add_argument("--folds", type=int, default=5)
     s.add_argument("--rows", type=int, default=20, help="how many recent candles to print")
+    s = add("backtest-llm", "replay the LLM analyst over the last N closed candles (paid API calls)")
+    s.add_argument("--n", type=int, default=24); s.add_argument("--workers", type=int, default=4)
     s = add("predict", "predict direction of the next candle (ML + TA, optionally Claude)")
     s.add_argument("--json", action="store_true"); s.add_argument("--llm", action="store_true", help="also ask the LLM (needs OPENAI_API_KEY or ANTHROPIC_API_KEY)")
     args = ap.parse_args()
-    {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest, "predict": cmd_predict}[args.cmd](args)
+    {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest,
+     "backtest-llm": cmd_backtest_llm, "predict": cmd_predict}[args.cmd](args)
 
 
 if __name__ == "__main__":
