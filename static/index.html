@@ -64,6 +64,8 @@
   .tt-t { width: 100%; border-collapse: collapse; font-size: 12px; }
   .tt-t td { padding: 2px 4px 2px 0; border: 0; white-space: nowrap; }
   .tt-t td:first-child { color: var(--ink-2); width: 34px; }
+  .tt-t td.num { text-align: right; padding-right: 10px; }
+  .tt-t tr.tt-hd td { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; padding-bottom: 1px; }
   .tt-note { color: var(--ink-3); }
   .chart.small { height: 130px; }
   .charthead { display: flex; justify-content: space-between; align-items: baseline; }
@@ -233,7 +235,7 @@ const fmtDHM = d => { const p = Object.fromEntries(F_DHM.formatToParts(d).map(x 
 const fmtHM = d => { const p = Object.fromEntries(F_HM.formatToParts(d).map(x => [x.type, x.value])); return `${p.hour}:${p.minute}`; };
 const fmtT = ts => fmtHM(new Date(ts * 1000));
 let nextCloseTs = null, priceChart, probChart, candles, probLine, lastKey = null;
-let tipMap = new Map(), tipStep = 900;
+let tipMap = new Map(), tipStep = 900, tipTaTotal = 16;
 
 // Tooltip for one candle: its prices and outcome, plus what each method predicted for it
 // (the prediction is stored on the previous row, which is when it was made).
@@ -248,10 +250,14 @@ function tipHtml(t) {
   if (!p) pred = '<div class="tt-note">No prediction in this window for the first candle shown.</div>';
   else {
     const ml = p.ml_p >= 0.5 ? 1 : 0;
+    // confidence on the same scale as the cards: ML 2*|p-0.5|, TA |score| / total signal weight
+    const mlConf = Math.abs(p.ml_p - 0.5) * 2, taConf = Math.abs(p.ta_score) / (tipTaTotal || 16);
+    const conf = v => v == null ? '' : `<b>${pct(v)}</b>`;
     pred = `<table class="tt-t">
-      <tr><td>ML</td><td>${dir(ml)}</td><td>p ${p.ml_p.toFixed(3)}</td><td>${res(ml)}</td></tr>
-      <tr><td>TA</td><td>${dir(p.ta_dir, 'tie')}</td><td>score ${p.ta_score > 0 ? '+' : ''}${p.ta_score.toFixed(0)}</td><td>${res(p.ta_dir)}</td></tr>
-      <tr><td>LLM</td><td>${dir(p.llm_dir, 'not asked')}</td><td>${p.llm_conf == null ? '' : 'conf ' + pct(p.llm_conf)}</td><td>${res(p.llm_dir)}</td></tr>
+      <tr class="tt-hd"><td></td><td>Call</td><td>Detail</td><td class="num">Conf</td><td></td></tr>
+      <tr><td>ML</td><td>${dir(ml)}</td><td>p ${p.ml_p.toFixed(3)}</td><td class="num">${conf(mlConf)}</td><td>${res(ml)}</td></tr>
+      <tr><td>TA</td><td>${dir(p.ta_dir, 'tie')}</td><td>score ${p.ta_score > 0 ? '+' : ''}${p.ta_score.toFixed(0)}</td><td class="num">${conf(taConf)}</td><td>${res(p.ta_dir)}</td></tr>
+      <tr><td>LLM</td><td>${dir(p.llm_dir, 'not asked')}</td><td></td><td class="num">${conf(p.llm_conf)}</td><td>${res(p.llm_dir)}</td></tr>
     </table>`;
   }
   return `<div class="tt-h">${fmtDHM(new Date(t * 1000))} – ${fmtHM(new Date((t + tipStep) * 1000))} ET</div>
@@ -341,6 +347,7 @@ function render(d) {
   $('taBook').textContent = `${t.textbook_vote.n_bull} bull / ${t.textbook_vote.n_bear} bear → ${t.textbook_vote.prediction.toLowerCase()}`;
   $('taRecent').textContent = pct(t.recent_hit_rate);
   const totalW = t.weights ? Object.values(t.weights).reduce((a, w) => a + Math.abs(w), 0) : t.signals.length;
+  tipTaTotal = totalW;
   const tf = $('taFill'), tbull = t.score > 0;
   tf.style.background = t.score === 0 ? 'transparent' : (tbull ? css('--bull') : css('--bear'));
   tf.style.left = tbull ? '50%' : (50 - Math.abs(t.score) / totalW * 50) + '%';
