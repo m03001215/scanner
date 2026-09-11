@@ -51,6 +51,20 @@
   .agree .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--neutral); }
   .agree.yes .dot { background: var(--bull); } .agree.no .dot { background: var(--bear); }
   .chart { height: 320px; width: 100%; }
+  #priceChart { position: relative; }
+  .tt { position: absolute; z-index: 5; pointer-events: none; width: max-content; min-width: 230px; max-width: 340px;
+        background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 8px;
+        box-shadow: 0 6px 18px rgba(0,0,0,.14); padding: 9px 11px; font-size: 12px; line-height: 1.45;
+        font-variant-numeric: tabular-nums; }
+  .tt[hidden] { display: none; }
+  .tt-h { font-weight: 600; margin-bottom: 3px; }
+  .tt-ohlc { color: var(--ink-2); white-space: nowrap; }
+  .tt-act { margin: 3px 0 7px; }
+  .tt-sub { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); border-top: 1px solid var(--border); padding-top: 6px; margin-bottom: 2px; }
+  .tt-t { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tt-t td { padding: 2px 4px 2px 0; border: 0; white-space: nowrap; }
+  .tt-t td:first-child { color: var(--ink-2); width: 34px; }
+  .tt-note { color: var(--ink-3); }
   .chart.small { height: 130px; }
   .charthead { display: flex; justify-content: space-between; align-items: baseline; }
   .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
@@ -163,7 +177,7 @@
     </section>
 
     <section class="card span2">
-      <div class="charthead"><h2>Price · last <span id="nRecent3">–</span> closed candles (ET)</h2>
+      <div class="charthead"><h2>Price · last <span id="nRecent3">–</span> closed candles (ET) <span class="sub" style="text-transform:none;letter-spacing:0;font-weight:400">· hover a candle to see what each method predicted for it</span></h2>
         <div class="legend"><span class="l-bull">Bullish candle</span><span class="l-bear">Bearish candle</span></div></div>
       <div id="priceChart" class="chart"></div>
       <div class="charthead" style="margin-top:10px"><h2>ML P(bullish) for the following candle</h2>
@@ -219,6 +233,32 @@ const fmtDHM = d => { const p = Object.fromEntries(F_DHM.formatToParts(d).map(x 
 const fmtHM = d => { const p = Object.fromEntries(F_HM.formatToParts(d).map(x => [x.type, x.value])); return `${p.hour}:${p.minute}`; };
 const fmtT = ts => fmtHM(new Date(ts * 1000));
 let nextCloseTs = null, priceChart, probChart, candles, probLine, lastKey = null;
+let tipMap = new Map(), tipStep = 900;
+
+// Tooltip for one candle: its prices and outcome, plus what each method predicted for it
+// (the prediction is stored on the previous row, which is when it was made).
+function tipHtml(t) {
+  const e = tipMap.get(t); if (!e) return null;
+  const c = e.c, p = e.p, act = c.close > c.open ? 1 : 0;
+  const chg = (c.close - c.open) / c.open * 100;
+  const f = x => x.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  const dir = (v, none) => v == null ? `<span class="flat">${none || '–'}</span>` : (v ? '<span class="up">▲ bull</span>' : '<span class="down">▼ bear</span>');
+  const res = v => v == null ? '' : (v === act ? '<span class="tick hit">✓ hit</span>' : '<span class="tick miss">✗ miss</span>');
+  let pred;
+  if (!p) pred = '<div class="tt-note">No prediction in this window for the first candle shown.</div>';
+  else {
+    const ml = p.ml_p >= 0.5 ? 1 : 0;
+    pred = `<table class="tt-t">
+      <tr><td>ML</td><td>${dir(ml)}</td><td>p ${p.ml_p.toFixed(3)}</td><td>${res(ml)}</td></tr>
+      <tr><td>TA</td><td>${dir(p.ta_dir, 'tie')}</td><td>score ${p.ta_score > 0 ? '+' : ''}${p.ta_score.toFixed(0)}</td><td>${res(p.ta_dir)}</td></tr>
+      <tr><td>LLM</td><td>${dir(p.llm_dir, 'not asked')}</td><td>${p.llm_conf == null ? '' : 'conf ' + pct(p.llm_conf)}</td><td>${res(p.llm_dir)}</td></tr>
+    </table>`;
+  }
+  return `<div class="tt-h">${fmtDHM(new Date(t * 1000))} – ${fmtHM(new Date((t + tipStep) * 1000))} ET</div>
+    <div class="tt-ohlc">O ${f(c.open)} · H ${f(c.high)} · L ${f(c.low)} · C ${f(c.close)}</div>
+    <div class="tt-act">Actual ${dir(act)} <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span> <span class="flat">· vol ${c.volume.toFixed(1)}</span></div>
+    <div class="tt-sub">Predicted before it opened</div>${pred}`;
+}
 let interval = '15m';
 const INTERVALS = ['5m', '15m', '1h', '4h'];
 try { const saved = localStorage.getItem('btcpred.interval'); if (INTERVALS.includes(saved)) interval = saved; } catch (e) {}
@@ -258,6 +298,19 @@ function initCharts() {
   const sync = (from, to) => from.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (syncing || !r) return; syncing = true; to.timeScale().setVisibleLogicalRange(r); syncing = false; });
   sync(priceChart, probChart); sync(probChart, priceChart);
+  const tip = document.createElement('div'); tip.className = 'tt'; tip.hidden = true;
+  $('priceChart').appendChild(tip);
+  priceChart.subscribeCrosshairMove(param => {
+    const box = $('priceChart'), pt = param.point;
+    if (!pt || param.time == null || pt.x < 0 || pt.y < 0 || pt.x > box.clientWidth || pt.y > box.clientHeight) { tip.hidden = true; return; }
+    const html = tipHtml(param.time);
+    if (!html) { tip.hidden = true; return; }
+    tip.innerHTML = html; tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight, pad = 16;
+    let x = pt.x + pad; if (x + w > box.clientWidth - 60) x = pt.x - w - pad;   // keep clear of the price axis
+    let y = pt.y + pad; if (y + h > box.clientHeight) y = Math.max(0, box.clientHeight - h - 4);
+    tip.style.left = Math.max(0, x) + 'px'; tip.style.top = y + 'px';
+  });
   const ro = new ResizeObserver(() => { priceChart.applyOptions({ width: $('priceChart').clientWidth }); probChart.applyOptions({ width: $('probChart').clientWidth }); });
   ro.observe($('priceChart'));
 }
@@ -304,6 +357,8 @@ function render(d) {
   const lr = d.llm_recent || {};
   $('llmRecent').textContent = lr.calls ? `LLM: ${lr.calls} call(s) in this window` + (lr.resolved ? `, ${pct(lr.hit_rate)} on ${lr.resolved} resolved.` : '.') : '';
   candles.setData(rec.map(r => ({ time: r.time, open: r.open, high: r.high, low: r.low, close: r.close })));
+  tipStep = d.interval_seconds || 900;
+  tipMap = new Map(rec.map((r, i) => [r.time, { c: r, p: i > 0 && rec[i - 1].time + tipStep === r.time ? rec[i - 1] : null }]));
   probLine.setData(rec.map(r => ({ time: r.time, value: r.ml_p })));
   priceChart.timeScale().fitContent();
 
