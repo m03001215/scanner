@@ -83,29 +83,45 @@ def api_llm(interval: str = "15m"):
 @app.get("/api/history")
 def api_history(
     interval: str = "15m",
-    start: str | None = Query(None, description="ISO date/time, inclusive (UTC unless offset given), e.g. 2025-01-01"),
+    start: str | None = Query(None, description="ISO date/time, inclusive (UTC unless an offset is given), e.g. 2026-09-10T17:33:00Z"),
     end: str | None = Query(None, description="ISO date/time, exclusive"),
+    agree: bool = Query(False, description="only candles where ML and TA made the same call (TA ties excluded)"),
     limit: int = Query(1000, ge=1, le=20000),
     offset: int = Query(0, ge=0),
     order: str = Query("asc", pattern="^(asc|desc)$"),
     format: str = Query("json", pattern="^(json|csv)$"),
 ):
-    """Per-candle out-of-sample backtest results: ML probability/call, TA score/call, real outcome.
+    """Per-candle out-of-sample results for any period: ML probability/call, TA score/call, real outcome.
 
-    `time` is the open of the predicted candle (UTC). These are replayed backtest calls from
-    models trained only on earlier data, not a log of what the live site showed at the time.
+    `time` is the open of the predicted candle (UTC). Rows with source="backtest" come from the stored
+    walk-forward replay; rows with source="live" cover every closed candle after it, computed with the
+    deployed models. Neither is a log of what the page displayed at the time.
     """
+    if interval not in predictor.INTERVALS:
+        raise HTTPException(status_code=404, detail=f"unsupported interval {interval!r}; choose one of {predictor.INTERVALS}")
+    def ts(v, name):
+        try:
+            t = pd.Timestamp(v)
+        except (ValueError, TypeError) as e:
+            raise HTTPException(status_code=400, detail=f"bad {name}: {e}")
+        return t.tz_localize("UTC") if t.tzinfo is None else t.tz_convert("UTC")
+    t_start = ts(start, "start") if start else None
+    t_end = ts(end, "end") if end else None
+    if t_start is not None and t_end is not None and t_end <= t_start:
+        raise HTTPException(status_code=400, detail="end must be after start")
     try:
-        df = predictor.load_history(interval)
+        df = predictor.full_history(interval)
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status_code=404, detail=str(e))
-    try:
-        if start:
-            df = df[df["time"] >= pd.Timestamp(start).tz_localize("UTC") if pd.Timestamp(start).tzinfo is None else pd.Timestamp(start)]
-        if end:
-            df = df[df["time"] < (pd.Timestamp(end).tz_localize("UTC") if pd.Timestamp(end).tzinfo is None else pd.Timestamp(end))]
-    except (ValueError, TypeError) as e:
-        raise HTTPException(status_code=400, detail=f"bad start/end: {e}")
+    except Exception as e:  # noqa: BLE001 - Binance or model failure while building live rows
+        log.warning("live history failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"could not build live rows: {type(e).__name__}: {e}")
+    if t_start is not None:
+        df = df[df["time"] >= t_start]
+    if t_end is not None:
+        df = df[df["time"] < t_end]
+    if agree:
+        df = df[df["ta_call"].notna() & (df["ml_call"] == df["ta_call"])]
     if order == "desc":
         df = df.iloc[::-1]
     total = len(df)
@@ -113,21 +129,31 @@ def api_history(
         buf = io.StringIO()
         out = df.copy(); out["time"] = out["time"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         out.to_csv(buf, index=False)
-        fname = f"btcusdt_{interval}_history.csv"
+        fname = f"btcusdt_{interval}_history{'_agree' if agree else ''}.csv"
         return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
                                  headers={"Content-Disposition": f'attachment; filename="{fname}"'})
     page = df.iloc[offset: offset + limit].copy()
     page["time"] = page["time"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     page = page.astype(object).where(page.notna(), None)
     rows = page.to_dict(orient="records")
+    bull, bear = df[df["ml_call"] == "BULL"], df[df["ml_call"] == "BEAR"]
+    acc = lambda x: round(float(x.mean()), 4) if len(x) else None
     summary = dict(
-        ml_acc=round(float(df["ml_hit"].mean()), 4) if total else None,
-        ta_acc=round(float(df["ta_hit"].mean()), 4) if total and df["ta_hit"].notna().any() else None,
+        candles=total,
+        ml_acc=acc(df["ml_hit"]),
+        ta_acc=acc(df["ta_hit"].dropna()),
         ta_calls=int(df["ta_hit"].notna().sum()),
+        bull_calls=len(bull), bull_acc=acc(bull["ml_hit"]),
+        bear_calls=len(bear), bear_acc=acc(bear["ml_hit"]),
+        actual_bull_rate=acc((df["actual"] == "BULL").astype(int)),
+        backtest_rows=int((df["source"] == "backtest").sum()), live_rows=int((df["source"] == "live").sum()),
     )
-    return dict(interval=interval, total=total, offset=offset, returned=len(rows),
+    return dict(interval=interval, agree=agree,
+                start=t_start.strftime("%Y-%m-%dT%H:%M:%SZ") if t_start is not None else None,
+                end=t_end.strftime("%Y-%m-%dT%H:%M:%SZ") if t_end is not None else None,
+                total=total, offset=offset, returned=len(rows),
                 next_offset=(offset + limit) if offset + limit < total else None,
-                range=dict(start=rows[0]["time"] if rows else None, end=rows[-1]["time"] if rows else None),
+                range=dict(first=rows[0]["time"] if rows else None, last=rows[-1]["time"] if rows else None),
                 summary=summary, rows=rows)
 
 

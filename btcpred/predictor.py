@@ -60,6 +60,70 @@ def load_history(interval: str) -> pd.DataFrame:
     return _HISTORY[interval][1]
 
 
+_LIVE: dict = {}
+_WARMUP_BARS = 600   # indicators (EMA200, 96-bar ranges) need this much history before the first live row
+
+
+def live_history(interval: str) -> pd.DataFrame:
+    """Per-candle results for every closed candle after the stored backtest history ends, computed
+    with the deployed ML model and TA weights. Same columns as the stored history plus source="live".
+
+    The deployed models were trained on data ending before the stored history ends, so these rows are
+    also out of sample. Cached until the next candle closes."""
+    _check_interval(interval)
+    hist = load_history(interval)
+    hist_end = hist["time"].iloc[-1]
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
+    cache = cache_path(interval)
+    need_from = hist_end - step * _WARMUP_BARS
+    days_needed = int((pd.Timestamp.now(tz="UTC") - need_from) / pd.Timedelta(days=1)) + 2
+    df = data.drop_open_candle(data.load_or_update(cache, interval=interval, days=max(days_needed, boot_days(interval))))
+    if df["open_time"].iloc[0] > need_from:          # e.g. a fresh Render instance with a short boot window
+        df = data.drop_open_candle(data.load_or_update(cache, interval=interval, days=days_needed, rebuild=True))
+    key = (str(df["open_time"].iloc[-1]), str(hist_end))
+    hit = _LIVE.get(interval)
+    if hit is not None and hit[0] == key:
+        return hit[1]
+
+    first = max(0, int(df["open_time"].searchsorted(need_from)))
+    d = df.iloc[first:].reset_index(drop=True)
+    booster, meta = _load_model(interval)
+    p = booster.predict(features.build_features(d)[meta["features"]].fillna(0))
+    rep = _ta_report(interval)
+    agg = ta.score(ta.signals(d), rep["weights"] if rep else None)
+    lab = lambda v: "BULL" if v == 1 else "BEAR"
+    rows = []
+    for i in range(len(d) - 1):                      # row i predicts candle i+1, which must have closed
+        t = d["open_time"].iloc[i + 1]
+        if t <= hist_end:
+            continue
+        actual = int(d["close"].iloc[i + 1] > d["open"].iloc[i + 1])
+        ml = int(p[i] >= 0.5)
+        ta_dir = agg["direction"].iloc[i]
+        ta_call = None if np.isnan(ta_dir) else lab(int(ta_dir))
+        rows.append(dict(time=t, ml_p=round(float(p[i]), 4), ml_call=lab(ml),
+                         ta_score=int(agg["score"].iloc[i]), ta_conf=round(float(agg["confidence"].iloc[i]), 3),
+                         ta_call=ta_call, actual=lab(actual), ml_hit=int(ml == actual),
+                         ta_hit=None if ta_call is None else int(int(ta_dir) == actual)))
+    live = pd.DataFrame(rows, columns=["time", "ml_p", "ml_call", "ta_score", "ta_conf", "ta_call", "actual", "ml_hit", "ta_hit"])
+    live["ta_hit"] = live["ta_hit"].astype("Int64")
+    live["time"] = pd.to_datetime(live["time"], utc=True).astype("datetime64[us, UTC]")
+    live["source"] = "live"
+    _LIVE[interval] = (key, live)
+    return live
+
+
+def full_history(interval: str) -> pd.DataFrame:
+    """Stored backtest rows followed by live rows up to the last closed candle."""
+    hist = load_history(interval).copy()
+    hist["time"] = hist["time"].astype("datetime64[us, UTC]")
+    hist["source"] = "backtest"
+    live = live_history(interval)
+    out = pd.concat([hist, live], ignore_index=True) if len(live) else hist
+    out["time"] = pd.to_datetime(out["time"], utc=True)     # guard against a unit mismatch turning it into object dtype
+    return out
+
+
 def boot_days(interval: str) -> int:
     env = os.environ.get("BTCPRED_BOOT_DAYS")
     return int(env) if env else _BOOT_DAYS.get(interval, 60)
