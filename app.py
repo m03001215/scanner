@@ -1,12 +1,14 @@
 """Web UI: `python app.py [--port 8765] [--host 0.0.0.0]`, then open http://127.0.0.1:8765"""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import io
+import time
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
@@ -21,6 +23,68 @@ STATIC = ROOT / "static"
 log = logging.getLogger("uvicorn.error")
 
 
+# ---- automatic LLM calls: one per closed candle on these timeframes (BTCPRED_LLM_AUTO="" turns it off) ----
+LLM_AUTO = [iv.strip() for iv in os.environ.get("BTCPRED_LLM_AUTO", "15m,1h").split(",") if iv.strip() in predictor.INTERVALS]
+LLM_AUTO_DELAY_S = 20          # wait after the candle boundary so Binance has the final closed candle
+LLM_STATUS: dict[str, dict] = {iv: {} for iv in LLM_AUTO}
+
+
+def _llm_job(interval: str, boundary: pd.Timestamp) -> None:
+    """Ask the LLM about the candle opening at `boundary`, retrying while that candle is still young."""
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
+    st = LLM_STATUS[interval]
+    now = lambda: pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
+    st.update(last_attempt_at=now(), candle=str(boundary))
+    have = llm.lookup(interval, str(boundary))
+    if have is not None:                           # someone already asked (a click, or before a restart)
+        st.update(last_ok_candle=str(boundary), last_prediction=have["prediction"], last_confidence=have["confidence"],
+                  last_cached=True, last_error=None, last_skip=None)
+        return
+    deadline = boundary + step / 2                # a call after half the candle is of little use
+    if pd.Timestamp.now(tz="UTC") >= deadline:
+        st.update(last_skip=f"candle {boundary} was more than half over when checked")
+        log.info("auto llm %s: skipped candle %s, more than half over", interval, boundary)
+        return
+    attempt = 0
+    while pd.Timestamp.now(tz="UTC") < deadline:
+        attempt += 1
+        try:
+            df = data.drop_open_candle(data.load_or_update(predictor.cache_path(interval), interval=interval,
+                                                           days=predictor.boot_days(interval)))
+            if df["open_time"].iloc[-1] < boundary - step:     # Binance has not published the closed candle yet
+                raise RuntimeError("closed candle not available yet")
+            out = llm.predict(df, interval, source="auto")
+            st.update(last_ok_candle=out["predicting_candle_open"], last_prediction=out["prediction"],
+                      last_confidence=out["confidence"], last_cached=out.get("cached"), last_error=None, last_skip=None,
+                      last_latency_s=out.get("latency_s"), last_ok_at=now())
+            log.info("auto llm %s %s -> %s %.2f%s", interval, out["predicting_candle_open"], out["prediction"],
+                     out["confidence"], " (already had a result)" if out.get("cached") else "")
+            return
+        except Exception as e:  # noqa: BLE001
+            st.update(last_error=f"{type(e).__name__}: {e}", last_error_at=pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"))
+            log.warning("auto llm %s attempt %d failed: %s", interval, attempt, e)
+            time.sleep(15 if "not available yet" in str(e) else 60)
+    st.update(last_skip=f"gave up on candle {boundary} after {attempt} attempt(s)")
+    log.warning("auto llm %s gave up on candle %s after %d attempt(s)", interval, boundary, attempt)
+
+
+async def _llm_scheduler() -> None:
+    loop = asyncio.get_running_loop()
+    now = pd.Timestamp.now(tz="UTC")
+    # cover the candle that is already forming when the server starts, if nobody asked yet
+    jobs = [loop.run_in_executor(None, _llm_job, iv, now.floor(pd.Timedelta(milliseconds=data.INTERVAL_MS[iv]))) for iv in LLM_AUTO]
+    await asyncio.gather(*jobs, return_exceptions=True)
+    while True:
+        now = pd.Timestamp.now(tz="UTC")
+        nxt = {iv: now.floor(pd.Timedelta(milliseconds=data.INTERVAL_MS[iv])) + pd.Timedelta(milliseconds=data.INTERVAL_MS[iv]) for iv in LLM_AUTO}
+        for iv, t in nxt.items():
+            LLM_STATUS[iv]["next_run_at"] = (t + pd.Timedelta(seconds=LLM_AUTO_DELAY_S)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        boundary = min(nxt.values())
+        await asyncio.sleep(max(0.0, (boundary - now).total_seconds() + LLM_AUTO_DELAY_S))
+        due = [iv for iv, t in nxt.items() if t == boundary]
+        await asyncio.gather(*(loop.run_in_executor(None, _llm_job, iv, boundary) for iv in due), return_exceptions=True)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for iv in predictor.INTERVALS:  # warm the data cache + model so the first page load is fast
@@ -29,7 +93,15 @@ async def lifespan(_: FastAPI):
             log.info("warm-up prediction done for %s", iv)
         except Exception as e:  # noqa: BLE001
             log.warning("warm-up failed for %s (will retry on request): %s", iv, e)
+    task = None
+    if LLM_AUTO and llm.available():
+        task = asyncio.create_task(_llm_scheduler())
+        log.info("automatic LLM calls on: %s", ", ".join(LLM_AUTO))
+    else:
+        log.info("automatic LLM calls off (%s)", "no LLM key" if LLM_AUTO else "BTCPRED_LLM_AUTO is empty")
     yield
+    if task:
+        task.cancel()
 
 
 app = FastAPI(title="BTCUSDT 15m Predictor", lifespan=lifespan)
@@ -62,22 +134,40 @@ def api_backtest(interval: str = "15m"):
     return FileResponse(path, media_type="application/json")
 
 
+@app.get("/api/llm/status")
+def api_llm_status():
+    """Whether the LLM analyst is configured, which timeframes run automatically, and the scheduler's last runs."""
+    return dict(configured=llm.available(), provider=llm.provider(), model=llm.model_name() if llm.available() else None,
+                auto_intervals=LLM_AUTO if llm.available() else [], auto_delay_s=LLM_AUTO_DELAY_S,
+                scheduler={iv: LLM_STATUS[iv] for iv in LLM_AUTO} if llm.available() else {})
+
+
 @app.get("/api/llm")
-def api_llm(interval: str = "15m"):
-    """The LLM's call for the candle forming now, with its reasoning. One API call per closed candle."""
+def api_llm(interval: str = "15m", cached_only: bool = False):
+    """The LLM's call for the candle forming now, with its reasoning.
+
+    At most one paid call per candle. `cached_only=true` never calls the model: it returns the stored
+    result for the current candle, or 404 if there is none yet."""
     if interval not in predictor.INTERVALS:
         raise HTTPException(status_code=404, detail=f"unsupported interval {interval!r}")
     if not llm.available():
         raise HTTPException(status_code=503, detail="LLM predictor not configured: set OPENAI_API_KEY (or ANTHROPIC_API_KEY) on the server")
     df = data.drop_open_candle(data.load_or_update(predictor.cache_path(interval), interval=interval,
                                                    days=predictor.boot_days(interval)))
-    try:
-        out = llm.predict(df, interval)
-    except Exception as e:  # noqa: BLE001 - surface SDK/auth/rate-limit errors to the UI as text
-        log.warning("llm predict failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"LLM call failed: {type(e).__name__}: {e}")
-    out = dict(out, interval=interval, track_record=llm.track_record(interval, df))
-    return out
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
+    candle_open = str((df["close_time"].iloc[-1] + pd.Timedelta(milliseconds=1)).floor(step))
+    if cached_only:
+        out = llm.lookup(interval, candle_open)
+        if out is None:
+            raise HTTPException(status_code=404, detail="no LLM result for the current candle yet")
+        out = dict(out, cached=True)
+    else:
+        try:
+            out = llm.predict(df, interval)
+        except Exception as e:  # noqa: BLE001 - surface SDK/auth/rate-limit errors to the UI as text
+            log.warning("llm predict failed: %s", e)
+            raise HTTPException(status_code=502, detail=f"LLM call failed: {type(e).__name__}: {e}")
+    return dict(out, interval=interval, auto=interval in LLM_AUTO, track_record=llm.track_record(interval, df))
 
 
 @app.get("/api/history")

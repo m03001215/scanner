@@ -209,15 +209,26 @@ export OPENAI_API_KEY=sk-proj-...                # or ANTHROPIC_API_KEY=sk-ant-.
 | `BTCPRED_LLM_MODEL` | `gpt-5` (OpenAI) / `claude-opus-5` (Anthropic) | Model id |
 | `BTCPRED_LLM_EFFORT` | `medium` | Reasoning depth: `low`, `medium`, `high` (Anthropic also `xhigh`, `max`). GPT-5 at medium takes ~30 s per call; `low` is several times faster. |
 | `BTCPRED_LLM_CANDLES` | `48` | Closed candles included in the prompt |
+| `BTCPRED_LLM_AUTO` | `15m,1h` | Timeframes the server asks automatically after every candle closes. Set to an empty string to turn automatic calls off. Only active when an LLM key is set. |
 
 The prompt contains only market data (candle table + RSI, EMAs, MACD, Bollinger,
 Stochastic, ATR, range, volume, taker flow), never the ML or TA calls, so the three
 methods stay independent. Structured output (a JSON schema) guarantees a parseable
-call every time. The prompt is ~1.6k tokens. The dashboard never calls the model on
-its own: card 3 has an "Ask the model" button, and each click makes at most one API
-call per candle per timeframe (repeat clicks on the same candle are served from cache). Calls happen lazily, once per closed candle
-per timeframe, only when the dashboard or API is hit. Each call is appended to
-`data/llm_log_<tf>.jsonl` so the card can show a running hit rate. For a small
+call every time. The prompt is ~1.6k tokens.
+
+**Automatic calls.** On the timeframes in `BTCPRED_LLM_AUTO` (15m and 1h by default) the
+server asks the model about 20 s after each candle closes, retrying for up to half the
+candle if Binance or the model call fails. On startup it also covers the current candle
+if nobody has asked yet and less than half of it has passed. At GPT-5 medium effort that
+is about 120 calls a day, roughly $3-4/day. `GET /api/llm/status` shows which timeframes
+are on auto, the next run time, and the last result or error per timeframe.
+
+**Manual calls.** On other timeframes card 3 has an "Ask the model" button. Either way
+there is at most one paid call per candle per timeframe: a per-timeframe lock stops a
+click and the scheduler from calling at the same time, and every answer (including its
+reason) is appended to `data/llm_log_<tf>.jsonl`, so a restarted server shows it again
+without a new call. `GET /api/llm?interval=15m&cached_only=true` returns the stored
+result for the current candle and never calls the model. For a small
 point-in-time replay, `main.py backtest-llm -i 1h --n 24` re-asks the model for each of
 the last N closed candles using only the candles before it (one paid call each) and
 writes `models/<tf>/llm_replay.csv`; a full multi-year backtest is not offered because

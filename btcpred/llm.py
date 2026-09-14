@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -40,6 +41,13 @@ def model_name() -> str:
     return os.environ.get("BTCPRED_LLM_MODEL") or DEFAULT_MODEL.get(provider() or "openai", "gpt-5")
 
 _CACHE: dict = {}
+_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock(interval: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(interval, threading.Lock())
 
 
 class CandleCall(BaseModel):
@@ -118,36 +126,54 @@ def _streak(body: pd.Series) -> str:
     return f"{k} {'up' if s[-1] > 0 else 'down' if s[-1] < 0 else 'flat'}"
 
 
-def predict(df: pd.DataFrame, interval: str) -> dict:
-    """Return Claude's call for the candle after df's last (closed) row. Cached per candle."""
+def lookup(interval: str, candle_open: str) -> dict | None:
+    """Stored result for the candle opening at `candle_open` (memory first, then the log). Never calls the API."""
+    for (iv, _), v in list(_CACHE.items()):
+        if iv == interval and v.get("predicting_candle_open") == candle_open:
+            return v
+    r = load_log(interval).get(candle_open)
+    if r is None:
+        return None
+    return dict({"reason": None, "key_factors": [], "provider": None, "effort": None, "latency_s": None,
+                 "usage": None, "last_closed_candle": None, "source": None, "at": None}, **r)
+
+
+def predict(df: pd.DataFrame, interval: str, source: str = "manual") -> dict:
+    """Return the LLM's call for the candle after df's last (closed) row.
+
+    At most one paid call per candle per timeframe: results are kept in memory and in the log, and a
+    per-timeframe lock stops a click and the scheduler from calling for the same candle at once."""
     prov = provider()
     if prov is None:
         raise RuntimeError("LLM predictor not configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY")
     last_bar = df.iloc[-1]
     key = (interval, str(last_bar["open_time"]))
-    if key in _CACHE:
-        return _CACHE[key]
-
-    context = build_context(df, interval)
-    model = model_name()
-    t0 = time.time()
-    call, usage = (_call_openai if prov == "openai" else _call_anthropic)(model, context)
-    direction = "BULLISH" if call.direction.strip().lower().startswith("bull") else "BEARISH"
     step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
-    out = dict(
-        prediction=direction, confidence=round(float(call.confidence), 3),
-        reason=call.reason.strip(), key_factors=[k.strip() for k in call.key_factors][:6],
-        provider=prov, model=model, effort=EFFORT,
-        last_closed_candle=str(last_bar["open_time"]),
-        predicting_candle_open=str((last_bar["close_time"] + pd.Timedelta(milliseconds=1)).floor(step)),
-        latency_s=round(time.time() - t0, 1),
-        usage=usage,
-    )
-    for k in [k for k in _CACHE if k[0] == interval and k != key]:
-        del _CACHE[k]
-    _CACHE[key] = out
-    _append_log(interval, out)
-    return out
+    candle_open = str((last_bar["close_time"] + pd.Timedelta(milliseconds=1)).floor(step))
+    with _lock(interval):
+        hit = _CACHE.get(key) or lookup(interval, candle_open)
+        if hit is not None:
+            return dict(hit, cached=True)
+        context = build_context(df, interval)
+        model = model_name()
+        t0 = time.time()
+        call, usage = (_call_openai if prov == "openai" else _call_anthropic)(model, context)
+        direction = "BULLISH" if call.direction.strip().lower().startswith("bull") else "BEARISH"
+        out = dict(
+            prediction=direction, confidence=round(float(call.confidence), 3),
+            reason=call.reason.strip(), key_factors=[k.strip() for k in call.key_factors][:6],
+            provider=prov, model=model, effort=EFFORT,
+            last_closed_candle=str(last_bar["open_time"]),
+            predicting_candle_open=candle_open,
+            latency_s=round(time.time() - t0, 1),
+            usage=usage, source=source,
+            at=pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+        for k in [k for k in _CACHE if k[0] == interval and k != key]:
+            del _CACHE[k]
+        _CACHE[key] = out
+        _append_log(interval, out)
+        return dict(out, cached=False)
 
 
 def _call_openai(model: str, context: str) -> tuple[CandleCall, dict]:
@@ -191,8 +217,8 @@ def _call_anthropic(model: str, context: str) -> tuple[CandleCall, dict]:
 def _append_log(interval: str, out: dict) -> None:
     p = log_path(interval)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a") as f:
-        f.write(json.dumps({k: out[k] for k in ("predicting_candle_open", "prediction", "confidence", "model")}) + "\n")
+    with p.open("a") as f:   # full answer, so a restarted server can still show the reason
+        f.write(json.dumps(out) + "\n")
 
 
 def load_log(interval: str) -> dict[str, dict]:

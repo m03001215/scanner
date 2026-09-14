@@ -157,7 +157,7 @@
 
     <section class="card span2" id="llmCard">
       <div class="charthead"><h2>3 · LLM analyst</h2><span class="sub" id="llmMeta" style="margin:0">–</span></div>
-      <div class="sub">A language model reads the last 48 closed candles and an indicator snapshot, then gives a call with its reasoning. Independent of the two methods above. Runs only when you ask: one paid API call per click, cached for the rest of the candle.</div>
+      <div class="sub">A language model reads the last 48 closed candles and an indicator snapshot, then gives a call with its reasoning. Independent of the two methods above. <span id="llmDesc"></span></div>
       <div class="askrow">
         <button type="button" id="llmAsk" class="btn">Ask the model</button>
         <span class="sub" id="llmState" style="margin:0"></span>
@@ -272,7 +272,7 @@ function setInterval_(tf) {
   if (tf === interval) return;
   interval = tf; lastKey = null; nextCloseTs = null;
   try { localStorage.setItem('btcpred.interval', tf); } catch (e) {}
-  syncToggle(); llmIdle(); load(); loadBacktest();
+  syncToggle(); llmShown = null; llmDescribe(); llmIdle(''); load(); loadBacktest();
 }
 function syncToggle() {
   document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tf === interval)));
@@ -390,47 +390,82 @@ function render(d) {
   }).join('');
 }
 
-let llmKey = null;   // interval|candle of the result currently shown
-function llmIdle() {
-  $('llmBody').hidden = true; $('llmOff').hidden = true; $('llmMeta').textContent = '';
-  $('llmAsk').disabled = false; $('llmAsk').textContent = 'Ask the model';
-  $('llmState').textContent = 'No call made for this candle.';
+let llmShown = null;          // interval|candle of the result currently on screen
+let llmAuto = [], llmConfigured = null, llmBusy = false;
+
+async function loadLLMStatus() {
+  try {
+    const s = await (await fetch('/api/llm/status', { cache: 'no-store' })).json();
+    llmConfigured = s.configured; llmAuto = s.auto_intervals || [];
+  } catch (e) { llmConfigured = null; }
+  llmDescribe(); llmSync();
 }
-function llmRefreshState() {   // called after each data refresh: mark a shown result as stale once its candle has closed
-  if (!llmKey) { llmIdle(); return; }
-  const [tf, cand] = llmKey.split('|');
-  if (tf !== interval) { llmIdle(); return; }
-  if (cand !== lastKey) { $('llmAsk').disabled = false; $('llmAsk').textContent = 'Ask for the new candle'; $('llmState').textContent = 'The candle this result was for has closed.'; }
+function llmDescribe() {
+  const auto = llmAuto.includes(interval);
+  $('llmDesc').textContent = llmConfigured === false ? ''
+    : auto ? `Runs automatically about 20 s after each ${interval} candle closes (timeframes on auto: ${llmAuto.join(', ')}).`
+    : `On ${interval} it runs only when you ask: one paid API call per candle.` + (llmAuto.length ? ` Automatic on ${llmAuto.join(', ')}.` : '');
+}
+function llmIdle(msg) {
+  $('llmBody').hidden = true; $('llmOff').hidden = true; $('llmMeta').textContent = '';
+  $('llmAsk').hidden = false; $('llmAsk').disabled = false; $('llmAsk').textContent = 'Ask the model';
+  $('llmState').textContent = msg || 'No call made for this candle.';
+}
+function llmOff(html) {
+  $('llmBody').hidden = true; $('llmOff').hidden = false; $('llmOff').innerHTML = html;
+  $('llmAsk').hidden = true; $('llmState').textContent = ''; $('llmMeta').textContent = '';
+}
+function showLLM(d, tf) {
+  llmShown = tf + '|' + lastKey;
+  $('llmOff').hidden = true; $('llmBody').hidden = false;
+  $('llmBadge').className = 'badge ' + d.prediction; $('llmBadge').textContent = d.prediction;
+  $('llmConf').textContent = pct(d.confidence);
+  $('llmReason').textContent = d.reason || 'Reason not recorded for this call.';
+  $('llmFactors').innerHTML = (d.key_factors || []).map(f => `<li>${String(f).replace(/</g, '&lt;')}</li>`).join('');
+  const agreeMl = d.prediction === $('mlBadge').textContent, agreeTa = d.prediction === $('taBadge').textContent;
+  const how = d.source === 'auto' ? 'automatic' : d.source === 'manual' ? 'asked manually' : '';
+  const when = d.at ? ` at ${fmtHM(parseApi(d.at.replace('Z', '+00:00')))} ET` : '';
+  $('llmMeta').textContent = [d.provider && d.model ? `${d.provider} ${d.model}` : d.model, d.effort ? `effort ${d.effort}` : '',
+    d.latency_s != null ? `${d.latency_s}s` : '', how ? how + when : '',
+    `for the candle opening ${fmtHM(parseApi(d.predicting_candle_open))} ET`,
+    agreeMl && agreeTa ? 'agrees with ML and TA' : agreeMl ? 'agrees with ML, not TA' : agreeTa ? 'agrees with TA, not ML' : 'disagrees with ML and TA'
+  ].filter(Boolean).join(' · ');
+  const t = d.track_record || {};
+  $('llmTrack').textContent = t.resolved ? `Track record on this server: ${pct(t.hit_rate)} on ${t.resolved} resolved calls (${t.calls} made).` : `Track record: ${t.calls || 0} call(s) made, none resolved yet.`;
+  $('llmAsk').hidden = true;
+  $('llmState').textContent = '';
+}
+// Show the stored result for the current candle without paying for a call; called on every refresh.
+async function llmSync() {
+  const tf = interval;
+  if (llmConfigured === false) { llmOff('Not configured. Set <code>OPENAI_API_KEY</code> (or <code>ANTHROPIC_API_KEY</code>) on the server to enable the LLM analyst.'); return; }
+  if (!lastKey || llmBusy || llmShown === tf + '|' + lastKey) return;
+  try {
+    const r = await fetch(`/api/llm?interval=${tf}&cached_only=true`, { cache: 'no-store' });
+    if (tf !== interval) return;
+    if (r.ok) { showLLM(await r.json(), tf); return; }
+    if (r.status === 503) { llmConfigured = false; llmDescribe(); llmSync(); return; }
+    llmShown = null;
+    if (llmAuto.includes(tf)) {
+      llmIdle('The automatic call for this candle is running. The result appears here when it finishes, usually within a minute.');
+      $('llmAsk').textContent = 'Ask now';
+    } else llmIdle();
+  } catch (e) { /* network hiccup: try again on the next refresh */ }
 }
 async function askLLM() {
   const tf = interval, btn = $('llmAsk');
-  btn.disabled = true; btn.textContent = 'Thinking…'; $('llmState').textContent = 'Reasoning models take 10–40 s.';
-  $('llmOff').hidden = true; $('llmMeta').textContent = '';
+  llmBusy = true; btn.disabled = true; btn.textContent = 'Thinking…'; $('llmState').textContent = 'Reasoning models take 10–60 s.';
+  $('llmOff').hidden = true;
   try {
     const r = await fetch(`/api/llm?interval=${tf}`, { cache: 'no-store' });
     const d = await r.json();
     if (tf !== interval) return;
     if (!r.ok) throw Object.assign(new Error(d.detail || r.statusText), { status: r.status });
-    llmKey = tf + '|' + lastKey;
-    $('llmBody').hidden = false;
-    $('llmBadge').className = 'badge ' + d.prediction; $('llmBadge').textContent = d.prediction;
-    $('llmConf').textContent = pct(d.confidence);
-    $('llmReason').textContent = d.reason;
-    $('llmFactors').innerHTML = d.key_factors.map(f => `<li>${f.replace(/</g, '&lt;')}</li>`).join('');
-    const agreeMl = d.prediction === $('mlBadge').textContent, agreeTa = d.prediction === $('taBadge').textContent;
-    $('llmMeta').textContent = `${d.provider} ${d.model} · effort ${d.effort} · ${d.latency_s}s · for the candle opening ${fmtHM(parseApi(d.predicting_candle_open))} ET · ` +
-      (agreeMl && agreeTa ? 'agrees with ML and TA' : agreeMl ? 'agrees with ML, not TA' : agreeTa ? 'agrees with TA, not ML' : 'disagrees with ML and TA');
-    const t = d.track_record;
-    $('llmTrack').textContent = t.resolved ? `Track record on this server: ${pct(t.hit_rate)} on ${t.resolved} resolved calls (${t.calls} made).` : `Track record: ${t.calls} call(s) made, none resolved yet.`;
-    btn.textContent = 'Ask again'; btn.disabled = false;
-    $('llmState').textContent = d.latency_s < 2 ? 'Served from cache, no new API call.' : `Called ${d.provider} · ${d.usage.input_tokens + d.usage.output_tokens} tokens.`;
+    showLLM(d, tf);
   } catch (e) {
-    $('llmBody').hidden = true; $('llmOff').hidden = false;
-    $('llmOff').innerHTML = e.status === 503
-      ? 'Not configured. Set <code>OPENAI_API_KEY</code> (or <code>ANTHROPIC_API_KEY</code>) on the server to enable the LLM analyst.'
-      : 'LLM call failed: ' + String(e.message).replace(/</g, '&lt;');
-    btn.textContent = 'Ask the model'; btn.disabled = false; $('llmState').textContent = '';
-  }
+    if (e.status === 503) { llmConfigured = false; llmDescribe(); llmSync(); }
+    else { llmIdle(''); $('llmOff').hidden = false; $('llmOff').innerHTML = 'LLM call failed: ' + String(e.message).replace(/</g, '&lt;'); }
+  } finally { llmBusy = false; btn.disabled = false; }
 }
 $('llmAsk').addEventListener('click', askLLM);
 
@@ -462,7 +497,8 @@ async function load() {
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const d = await r.json();
     if (tf !== interval) return;  // user switched while this request was in flight
-    if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); llmRefreshState(); }
+    if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); }
+    llmSync();
     $('status').textContent = 'updated ' + new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()) + ' ET';
   } catch (e) {
     $('error').hidden = false; $('error').textContent = 'Could not load prediction: ' + e.message;
@@ -477,7 +513,7 @@ function tickClock() {
   if (s === 0 && !tickClock.pending) { tickClock.pending = true; setTimeout(() => { tickClock.pending = false; load(); }, 3000); }
 }
 
-initCharts(); syncToggle(); llmIdle(); load(); loadBacktest();
+initCharts(); syncToggle(); llmIdle(''); load(); loadBacktest(); loadLLMStatus();
 setInterval(load, 30000); setInterval(tickClock, 1000);
 </script>
 </body>

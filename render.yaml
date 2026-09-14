@@ -17,5 +17,7 @@ services:
         sync: false
       - key: BTCPRED_LLM_MODEL
         value: "gpt-5"
+      - key: BTCPRED_LLM_AUTO    # timeframes called automatically every candle once a key is set (~$3-4/day for 15m,1h); "" = off
+        value: "15m,1h"
       - key: BTCPRED_LLM_EFFORT
         value: "medium"
