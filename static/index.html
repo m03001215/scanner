@@ -102,6 +102,56 @@
   .seg button + button { border-left: 1px solid var(--border); }
   .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
   .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* ---- all-timeframe overview ---- */
+  .ov { margin-bottom: 14px; }
+  .ov-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin: 2px 2px 8px; }
+  .ov-head h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-2); }
+  .ov-grid { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 1080px) { .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .ov-grid { grid-template-columns: 1fr; } }
+  .ovc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0;
+         cursor: pointer; text-align: left; font: inherit; color: inherit; display: flex; flex-direction: column; gap: 8px; }
+  .ovc:hover { border-color: var(--ink-3); }
+  .ovc:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ovc[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .ovc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .ovc-tf { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+  .ovc-cd { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ovc-cd b { color: var(--ink); font-weight: 600; }
+  .ovc-when { font-size: 12px; color: var(--ink-3); margin-top: -6px; }
+  .gatebar { border-radius: 7px; padding: 7px 10px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .gatebar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gatebar small { font-weight: 500; font-size: 11px; opacity: .85; white-space: nowrap; }
+  .gatebar.pass.BULLISH { background: var(--bull); color: #fff; } .gatebar.pass.BEARISH { background: var(--bear); color: #fff; }
+  .gatebar.agree.BULLISH { background: var(--bull-bg); color: var(--bull); } .gatebar.agree.BEARISH { background: var(--bear-bg); color: var(--bear); }
+  .gatebar.none { background: var(--neutral-bg); color: var(--ink-2); }
+  .ovt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ovt td { border: 0; padding: 2px 0; white-space: nowrap; }
+  .ovt td:first-child { color: var(--ink-3); width: 34px; font-size: 11.5px; }
+  .ovt td.num { text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .ovt .ok { color: var(--bull); font-weight: 700; } .ovt .no { color: var(--ink-3); }
+  .strip { display: grid; grid-template-columns: 30px 1fr; gap: 3px 6px; align-items: center; font-size: 10.5px; color: var(--ink-3); }
+  .cells { display: grid; grid-template-columns: repeat(25, 1fr); gap: 2px; }
+  .cells i { display: block; height: 10px; border-radius: 2px; background: var(--neutral-bg); }
+  .cells i.hit { background: var(--bull); } .cells i.miss { background: var(--bear); }
+  .cells i.pend { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-3); }
+  .cells i.skip { background: var(--neutral-bg); opacity: .6; }
+  .ovc-foot { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; border-top: 1px solid var(--border); padding-top: 6px;
+              display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 0 8px; align-items: baseline; }
+  .ovc-foot span { white-space: nowrap; } .ovc-foot b { display: block; color: var(--ink); font-weight: 600; font-size: 12.5px; }
+  .ovc-err { color: var(--bear); font-size: 12.5px; }
+  .ovs { margin-top: 12px; }
+  .ovs-head { display: flex; justify-content: space-between; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ovs table td, .ovs table th { padding: 6px 8px; }
+  .ovs th.grp { text-align: center; border-bottom: 0; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .ovs td.acc { font-weight: 600; }
+  .ovs td.gatecol { background: var(--bull-bg); }
+  .ovseg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .ovseg button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-weight: 600; font-size: 12.5px; padding: 5px 11px; cursor: pointer; }
+  .ovseg button + button { border-left: 1px solid var(--border); }
+  .ovseg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .ovseg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 </style>
 </head>
 <body>
@@ -121,6 +171,29 @@
   </header>
 
   <div id="error" class="err" hidden></div>
+
+  <section class="ov" aria-label="All timeframes">
+    <div class="ov-head">
+      <h2>All timeframes at once</h2>
+      <span class="sub" style="margin:0" id="ovMeta">Loading all timeframes…</span>
+    </div>
+    <div class="ov-grid" id="ovCards"></div>
+    <div class="card ovs">
+      <div class="ovs-head">
+        <div>
+          <h2 style="margin:0">Gate results by timeframe</h2>
+          <div class="sub" style="margin:2px 0 0" id="ovStatsSub">How many candles passed each gate, and how often the call was right.</div>
+        </div>
+        <div class="ovseg" role="group" aria-label="Period">
+          <button type="button" data-win="backtest" aria-pressed="true">Backtest</button>
+          <button type="button" data-win="live" aria-pressed="false">Live since training</button>
+          <button type="button" data-win="d7" aria-pressed="false">Last 7 days</button>
+          <button type="button" data-win="h24" aria-pressed="false">Last 24 hours</button>
+        </div>
+      </div>
+      <div class="scroll"><table id="ovStats"></table></div>
+    </div>
+  </section>
 
   <div class="grid">
     <section class="card">
@@ -276,6 +349,7 @@ function setInterval_(tf) {
 }
 function syncToggle() {
   document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tf === interval)));
+  document.querySelectorAll('.ovc').forEach(x => x.setAttribute('aria-current', String(x.dataset.tf === interval)));
   $('tfLabel').textContent = interval;
 }
 document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => setInterval_(b.dataset.tf)));
@@ -506,6 +580,103 @@ async function load() {
   }
 }
 
+// ================= all-timeframe overview =================
+let ovData = null, ovWin = 'backtest', ovPending = false;
+try { const w = localStorage.getItem('btcpred.ovwin'); if (['backtest', 'live', 'd7', 'h24'].includes(w)) ovWin = w; } catch (e) {}
+const ovEsc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ovDir = d => d === 'BULLISH' ? '<span class="up">▲ bull</span>' : d === 'BEARISH' ? '<span class="down">▼ bear</span>' : '<span class="flat">■ tie</span>';
+const ovClock = secs => { secs = Math.max(0, Math.floor(secs)); const h = Math.floor(secs / 3600), m = Math.floor(secs % 3600 / 60), s2 = secs % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(s2).padStart(2, '0'); };
+
+function ovCard(it) {
+  if (!it.ok) return `<button type="button" class="ovc" data-tf="${it.interval}" aria-current="${it.interval === interval}">
+    <div class="ovc-top"><span class="ovc-tf">${it.interval}</span></div><div class="ovc-err">Could not load: ${ovEsc(it.error)}</div></button>`;
+  const g = it.gate, ml = it.ml, ta = it.ta, L = it.llm;
+  const bar = g.passed ? `<div class="gatebar pass ${g.call}"><span>${g.call === 'BULLISH' ? '▲' : '▼'} Gate passed · ${g.call === 'BULLISH' ? 'bull' : 'bear'}</span><small>confident</small></div>`
+    : g.agree ? `<div class="gatebar agree ${g.call}"><span>${g.call === 'BULLISH' ? '▲' : '▼'} Agree · ${g.call === 'BULLISH' ? 'bull' : 'bear'}</span><small>below gate</small></div>`
+    : `<div class="gatebar none"><span>No agreement</span><small>${ta.prediction === 'NEUTRAL' ? 'TA tied' : 'calls differ'}</small></div>`;
+  const ck = ok => ok ? '<span class="ok">✓</span>' : '<span class="no">✗</span>';
+  let llmCell = '<span class="flat">off</span>', llmConf = '';
+  if (L.state === 'result') { llmCell = ovDir(L.prediction); llmConf = pct(L.confidence); }
+  else if (L.state === 'pending') llmCell = '<span class="flat">running…</span>';
+  else if (L.state === 'not_asked') llmCell = '<span class="flat">not asked</span>';
+  const rows = `<table class="ovt">
+      <tr><td>ML</td><td>${ovDir(ml.prediction)}</td><td class="num">p ${ml.p.toFixed(3)}</td><td class="num">${pct(ml.confidence)} ${ck(g.ml_ok)}</td></tr>
+      <tr><td>TA</td><td>${ovDir(ta.prediction)}</td><td class="num">score ${ta.score > 0 ? '+' : ''}${ta.score.toFixed(0)}</td><td class="num">${pct(ta.confidence)} ${ck(g.ta_ok)}</td></tr>
+      <tr><td>LLM</td><td colspan="2">${llmCell}</td><td class="num">${llmConf}</td></tr></table>`;
+  const cell = (call, actual, extra) => call == null ? '<i class="skip"></i>' : actual == null ? `<i class="pend" title="${extra} · forming"></i>`
+    : `<i class="${call === actual ? 'hit' : 'miss'}" title="${extra} · called ${call ? 'bull' : 'bear'}, closed ${actual ? 'bull' : 'bear'}"></i>`;
+  const lab = c => fmtHM(new Date(c.t * 1000)) + ' ET';
+  const strip = `<div class="strip" title="Last 25 candles, oldest left. Green = right, red = wrong, grey = no call, outline = forming.">
+      <span>ML</span><div class="cells">${it.strip.map(c => cell(c.ml, c.actual, lab(c))).join('')}</div>
+      <span>Gate</span><div class="cells">${it.strip.map(c => cell(c.gate ? c.ml : null, c.actual, lab(c))).join('')}</div>
+      <span>LLM</span><div class="cells">${it.strip.map(c => cell(c.llm, c.actual, lab(c))).join('')}</div></div>`;
+  const d = it.stats.h24, a = (h, n) => n ? pct(h / n) : '–';
+  const foot = `<div class="ovc-foot" title="Last 24 hours: passed / candles, then accuracy of those calls">
+      <span>Last<br>24h</span>
+      <span>Gate ${d.gate}/${d.total}<b>${a(d.gate_hits, d.gate)}</b></span>
+      <span>Agree ${d.agree}/${d.total}<b>${a(d.agree_hits, d.agree)}</b></span>
+      <span>All ${d.total}<b>${a(d.hits, d.total)}</b></span></div>`;
+  const when = `${fmtHM(parseApi(it.candle_open))}–${fmtHM(parseApi(it.candle_close))} ET candle · last close ${it.last_close.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `<button type="button" class="ovc" data-tf="${it.interval}" aria-current="${it.interval === interval}" aria-label="${it.interval}: open detail">
+    <div class="ovc-top"><span class="ovc-tf">${it.interval}</span><span class="ovc-cd">closes in <b data-close="${it.next_close_ts}">${ovClock(it.next_close_ts - Date.now() / 1000)}</b></span></div>
+    <div class="ovc-when">${when}</div>${bar}${rows}${strip}${foot}</button>`;
+}
+
+function ovRenderStats() {
+  if (!ovData) return;
+  document.querySelectorAll('.ovseg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.win === ovWin)));
+  const G = ovData.gate, names = { backtest: 'stored walk-forward backtest', live: 'live candles since training, predicted by the deployed models', d7: 'the last 7 days', h24: 'the last 24 hours' };
+  $('ovStatsSub').textContent = `Candles in ${names[ovWin]}. Gate = ML and TA agree, ML confidence ≥ ${G.ml_min.toFixed(2)} and TA confidence ≥ ${G.ta_min.toFixed(1)}. Accuracy = share of calls that matched the close.`;
+  const a = (h, n) => n ? pct(h / n) : '–', share = (k, n) => n ? pct(k / n) : '–', N = x => x.toLocaleString('en-US');
+  const rows = ovData.intervals.map(it => {
+    if (!it.ok) return `<tr><td><b>${it.interval}</b></td><td colspan="9" class="flat">unavailable</td></tr>`;
+    const s = it.stats[ovWin];
+    const period = s.first ? `${s.first.slice(0, 10)} → ${s.last.slice(0, 10)}` : '–';
+    return `<tr><td><b>${it.interval}</b></td><td class="flat">${period}</td>
+      <td class="num">${N(s.total)}</td><td class="num acc">${a(s.hits, s.total)}</td>
+      <td class="num">${N(s.agree)}</td><td class="num">${share(s.agree, s.total)}</td><td class="num acc">${a(s.agree_hits, s.agree)}</td>
+      <td class="num gatecol">${N(s.gate)}</td><td class="num gatecol">${share(s.gate, s.total)}</td><td class="num acc gatecol">${a(s.gate_hits, s.gate)}</td></tr>`;
+  }).join('');
+  $('ovStats').innerHTML = `<thead><tr><th></th><th></th><th class="grp" colspan="2">No gate</th><th class="grp" colspan="3">Agree only</th><th class="grp gatecol" colspan="3">Agree + confident</th></tr>
+    <tr><th>Timeframe</th><th>Period</th><th class="num">Candles</th><th class="num">Accuracy</th><th class="num">Passed</th><th class="num">Pass rate</th><th class="num">Accuracy</th>
+    <th class="num gatecol">Passed</th><th class="num gatecol">Pass rate</th><th class="num gatecol">Accuracy</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+function ovRender() {
+  if (!ovData) return;
+  $('ovCards').innerHTML = ovData.intervals.map(ovCard).join('');
+  const bad = ovData.intervals.filter(i => !i.ok).length;
+  $('ovMeta').textContent = `Updated ${fmtHM(parseApi(ovData.generated_at.replace('Z', '+00:00')))} ET · strips show the last 25 candles, oldest left: green right, red wrong, grey no call · click a card for its detail` + (bad ? ` · ${bad} timeframe(s) unavailable` : '');
+  ovRenderStats();
+}
+
+async function loadOverview() {
+  if (ovPending) return; ovPending = true;
+  try {
+    const r = await fetch('/api/overview', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.statusText || ('HTTP ' + r.status));
+    ovData = await r.json(); ovRender();
+  } catch (e) {
+    $('ovMeta').textContent = 'Could not refresh the overview (' + e.message + '). Showing the last data received; retrying.';
+  } finally { ovPending = false; }
+}
+
+$('ovCards').addEventListener('click', e => {
+  const c = e.target.closest('.ovc'); if (!c) return;
+  setInterval_(c.dataset.tf);
+  document.querySelectorAll('.ovc').forEach(x => x.setAttribute('aria-current', String(x.dataset.tf === interval)));
+  document.querySelector('.grid').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+});
+document.querySelectorAll('.ovseg button').forEach(b => b.addEventListener('click', () => {
+  ovWin = b.dataset.win; try { localStorage.setItem('btcpred.ovwin', ovWin); } catch (e) {} ovRenderStats();
+}));
+function ovTick() {
+  let due = false;
+  document.querySelectorAll('[data-close]').forEach(el => { const left = +el.dataset.close - Date.now() / 1000; el.textContent = ovClock(left); if (left <= 0) due = true; });
+  if (due && !ovTick.wait) { ovTick.wait = true; setTimeout(() => { ovTick.wait = false; loadOverview(); }, 4000); }
+}
+
 function tickClock() {
   if (!nextCloseTs) return;
   const s = Math.max(0, nextCloseTs - Date.now() / 1000);
@@ -513,8 +684,8 @@ function tickClock() {
   if (s === 0 && !tickClock.pending) { tickClock.pending = true; setTimeout(() => { tickClock.pending = false; load(); }, 3000); }
 }
 
-initCharts(); syncToggle(); llmIdle(''); load(); loadBacktest(); loadLLMStatus();
-setInterval(load, 30000); setInterval(tickClock, 1000);
+initCharts(); syncToggle(); llmIdle(''); load(); loadBacktest(); loadLLMStatus(); loadOverview();
+setInterval(load, 30000); setInterval(tickClock, 1000); setInterval(loadOverview, 30000); setInterval(ovTick, 1000);
 </script>
 </body>
 </html>

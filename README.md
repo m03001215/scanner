@@ -51,6 +51,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 
 | Endpoint | Returns |
 |---|---|
+| `GET /api/overview` | All four timeframes at once: current ML/TA calls with confidence, gate status (agree, and agree + ML ≥ 0.10 + TA ≥ 0.3), the stored LLM result if any, a 25-candle results strip, and gate pass counts and accuracy for the backtest, live since training, last 7 days and last 24 hours. Cached for 15 s; never makes a paid LLM call; a failing timeframe is reported in its own entry |
 | `GET /api/predict?interval=1h&recent=96` | Live ML + TA prediction for the candle forming now, plus the last `recent` candles (16-500) with each method's call and outcome |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |

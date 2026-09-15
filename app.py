@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import data, llm, predictor
+from btcpred import data, llm, overview, predictor
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -132,6 +132,13 @@ def api_backtest(interval: str = "15m"):
     if interval not in predictor.INTERVALS or not path.exists():
         raise HTTPException(status_code=404, detail=f"no backtest summary for {interval}")
     return FileResponse(path, media_type="application/json")
+
+
+@app.get("/api/overview")
+def api_overview():
+    """All timeframes at once: current ML/TA/LLM calls, gate status, recent results strip, and gate statistics
+    (backtest, live since training, last 7 days, last 24 hours). Never makes a paid LLM call."""
+    return overview.snapshot(LLM_AUTO)
 
 
 @app.get("/api/llm/status")
