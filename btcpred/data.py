@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -95,6 +96,18 @@ def _closed_only(df: pd.DataFrame) -> pd.DataFrame:
     return df[df["close_time"] <= now].reset_index(drop=True)
 
 
+def _atomic_parquet(df: pd.DataFrame, path: Path) -> None:
+    """Write to a unique temp file, then swap it in, so a reader never sees a half-written cache
+    (the server refreshes the same file from several threads) and a crash can't corrupt it."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        df.to_parquet(tmp, index=False)
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
 def load_or_update(cache: Path, symbol: str = "BTCUSDT", interval: str = "15m",
                    days: int = 730, rebuild: bool = False) -> pd.DataFrame:
     """Load cached klines and append anything newer from Binance.
@@ -116,7 +129,7 @@ def load_or_update(cache: Path, symbol: str = "BTCUSDT", interval: str = "15m",
         df = pd.concat([df, new], ignore_index=True) if not df.empty else new
         df = df.drop_duplicates("open_time", keep="last").sort_values("open_time").reset_index(drop=True)
     cache.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(cache, index=False)
+    _atomic_parquet(df, cache)
     return df
 
 
