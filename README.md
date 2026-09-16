@@ -223,7 +223,7 @@ Results as of 2026-09-16 (test window is the newest 40% of each history, fees in
 | 4h | +11,053 bp over 3.6 y | +15,506 bp | +4,747 to +7,128 bp | 65% | positive for every seed, Sharpe ≈ 0.7, but drawdowns near 100 bp-of-notional and only one market cycle |
 | 1h | +3,358 bp over 2.2 y | +4,979 bp | −226 to +2,591 bp | 26% | profit mostly market drift; seeds disagree |
 | 15m | −3,279 bp | −2,417 bp | negative | 80% | loses money on unseen data for every seed |
-| 5m | see `models/5m/rl/report.json` | | | | |
+| 5m | −3,795 bp | −677 bp | negative | 0% | no skill: two seeds hold one position for the whole test, one loses money churning |
 
 Direction accuracy when in the market is about 50–51% on every timeframe: whatever the 4h policy
 earns comes from timing exposure, not from calling direction better than the ML model.
