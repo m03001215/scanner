@@ -124,6 +124,15 @@ def full_history(interval: str) -> pd.DataFrame:
     return out
 
 
+def _calibrated(interval: str, p: float) -> dict:
+    """p_bullish_cal + calibration metadata from the current calibrator; p_bullish itself is never changed."""
+    try:
+        from . import calibration
+        return calibration.calibrate_p(interval, p)
+    except Exception:  # noqa: BLE001 - calibration must never break a prediction
+        return dict(p_bullish_cal=None, calibration_version=None, calibration_labels=None, calibration_n=None)
+
+
 def boot_days(interval: str) -> int:
     env = os.environ.get("BTCPRED_BOOT_DAYS")
     return int(env) if env else _BOOT_DAYS.get(interval, 60)
@@ -225,6 +234,7 @@ def predict(interval: str = "15m", recent: int = 96, refresh: bool = True) -> di
         predicting_candle_open=str(next_open), predicting_candle_close=str(next_close),
         next_close_ts=int(next_close.timestamp()),
         ml=dict(p_bullish=round(p, 4), prediction=ml_dir, confidence=round(abs(p - 0.5) * 2, 4),
+                **_calibrated(interval, p),
                 oos_accuracy=round(meta["report"]["overall"]["accuracy"], 4),
                 oos_auc=round(meta["report"]["overall"]["auc"], 4),
                 recent_hit_rate=round(float(np.mean(hits_ml)), 4) if hits_ml else None),

@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import data, llm, overview, predictor, rl
+from btcpred import calibration, data, llm, overview, predictor, rl
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -139,6 +139,22 @@ def api_overview():
     """All timeframes at once: current ML/TA/LLM calls, gate status, recent results strip, and gate statistics
     (backtest, live since training, last 7 days, last 24 hours). Never makes a paid LLM call."""
     return overview.snapshot(LLM_AUTO)
+
+
+@app.get("/api/calibration/{interval}")
+def api_calibration(interval: str):
+    """Current p_bullish calibrator for the interval: version, label mode, the raw -> calibrated lookup table, and the
+    held-out reliability tables (raw and calibrated, all rows and gated rows) it was validated on."""
+    if interval not in predictor.INTERVALS:
+        raise HTTPException(status_code=404, detail=f"unsupported interval {interval!r}")
+    cal = calibration.current(interval)
+    if cal is None:
+        raise HTTPException(status_code=404, detail=f"no calibrator for {interval}; run `python main.py calibrate -i {interval}`")
+    return dict(interval=interval, version=cal["version"], model_hash=cal["model_hash"], model_hash_current=calibration.model_hash(interval),
+                stale=cal["model_hash"] != calibration.model_hash(interval), method=cal["method"], labels=cal["labels"], label_tag=cal["label_tag"],
+                label_note=cal.get("label_note"), n=cal["n"], n_gated=cal["n_gated"], oos_period=cal["oos_period"], fitted_at=cal["fitted_at"],
+                gate_score_threshold=cal["gate_score_threshold"], fold_stable=cal["fold_stable"], evaluation=cal["evaluation"],
+                lookup=cal["lookup"], isotonic=cal["table"], platt=cal["platt"], heldout_reliability=cal["heldout_reliability"])
 
 
 @app.get("/api/rl")

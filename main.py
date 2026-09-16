@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from btcpred import backtest, data, features, llm, model, predictor, rl, ta
+from btcpred import backtest, calibration, calibration_report, data, features, llm, model, predictor, rl, ta
 from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, history_path, model_dir, ta_report_path
 
 
@@ -49,6 +49,7 @@ def cmd_train(args):
     rounds = int(np.median([f["best_iter"] for f in report["folds"]])) or 200
     booster = model.train_final(X, y, rounds)
     model.save(booster, list(X.columns), report, model_dir(args.interval))
+    _refit_calibrator(args.interval)
     imp = pd.Series(booster.feature_importance("gain"), index=X.columns).sort_values(ascending=False)
     print("\nTop features (gain):")
     print(imp.head(12).round(1).to_string())
@@ -114,6 +115,7 @@ def cmd_backtest(args):
         mh = "✓" if r.ml_hit else "✗"; th = "-" if pd.isna(r.ta_hit) else ("✓" if r.ta_hit else "✗")
         print(f"  {(r.open_time + step):%Y-%m-%d %H:%M} {r.ml_p:6.3f} {lab(r.ml_dir):>5s} {lab(r.ta_dir):>5s} {lab(r.actual):>5s}   {mh}   {th}")
     backtest.write_summary(bt, args.interval, step, backtest_summary_path(args.interval))
+    _refit_calibrator(args.interval, after_history=True)
     n_hist = backtest.write_history(bt, step, history_path(args.interval))
     print(f"\nfull per-candle table saved to {out}; summary -> {backtest_summary_path(args.interval)}; "
           f"history ({n_hist} rows) -> {history_path(args.interval)}")
@@ -149,6 +151,35 @@ def cmd_train_rl(args):
                                 seeds=tuple(args.seeds))
     rl.save(res["model"], res["report"], rl.rl_dir(args.interval))
     print(f"saved RL policy + report to {rl.rl_dir(args.interval)}")
+
+
+def _refit_calibrator(interval, after_history=False):
+    """Probability calibrator is tied to the model version: refit whenever the model or its OOS history changes."""
+    if not predictor.history_path(interval).exists():
+        print("calibration skipped: no OOS history yet (run `backtest`)"); return
+    try:
+        r = calibration.build(interval)
+        print(f"calibrator refit: version {r['calibrator']['version']}, {r['calibrator']['n']} OOS rows, labels {r['calibrator']['label_tag']}"
+              + ("" if after_history else " (note: history predates this retrain until `backtest` runs)"))
+    except Exception as e:  # noqa: BLE001
+        print(f"calibration refit failed: {type(e).__name__}: {e}")
+
+
+def cmd_calibrate(args):
+    """Fit and report the p_bullish probability calibrator for one interval, or all with --all."""
+    results = {}
+    for iv in (INTERVALS if args.all else [args.interval]):
+        r = calibration.build(iv)
+        out = calibration_report.write_interval(iv, r); results[iv] = r
+        e = r["evaluation"]
+        print(f"[{iv}] {r['info']['tag']}: n {r['info']['n_used']} gated {r['info']['n_gated']} | held-out Brier {e['brier']['raw']:.5f}->{e['brier']['isotonic']:.5f} "
+              f"ECE {e['ece']['raw']*100:.2f}%->{e['ece']['isotonic']*100:.2f}% | top tier said {e['top_tier']['said']*100:.1f}% got {e['top_tier']['got']*100:.1f}% | "
+              f"asym {'y' if r['direction']['asymmetric'] else 'n'} | {r['stability']['verdict']} | version {r['calibrator']['version']} | {out}")
+    if args.all or args.summary:
+        allr = results
+        if not args.all:  # summary needs every interval: rebuild the others without rewriting their reports
+            allr = {iv: (results[iv] if iv in results else calibration.build(iv, write=False)) for iv in INTERVALS}
+        print("summary:", calibration_report.write_summary(allr))
 
 
 def cmd_predict(args):
@@ -221,11 +252,13 @@ def main():
     s.add_argument("--days", type=int, default=730); s.add_argument("--cost-bp", type=float, default=5.0, help="fee per side in bp (default 5 = 10 bp round trip)")
     s.add_argument("--gamma", type=float, default=0.9); s.add_argument("--iterations", type=int, default=8); s.add_argument("--rounds", type=int, default=200)
     s.add_argument("--train-frac", type=float, default=0.6); s.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
+    s = add("calibrate", "fit + report the p_bullish probability calibrator (isotonic, walk-forward OOS rows only)")
+    s.add_argument("--all", action="store_true", help="all intervals plus the cross-interval summary"); s.add_argument("--summary", action="store_true", help="also write the cross-interval summary")
     s = add("predict", "predict direction of the next candle (ML + TA, optionally Claude)")
     s.add_argument("--json", action="store_true"); s.add_argument("--llm", action="store_true", help="also ask the LLM (needs OPENAI_API_KEY or ANTHROPIC_API_KEY)")
     args = ap.parse_args()
     {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest,
-     "backtest-llm": cmd_backtest_llm, "train-rl": cmd_train_rl, "predict": cmd_predict}[args.cmd](args)
+     "backtest-llm": cmd_backtest_llm, "train-rl": cmd_train_rl, "calibrate": cmd_calibrate, "predict": cmd_predict}[args.cmd](args)
 
 
 if __name__ == "__main__":
