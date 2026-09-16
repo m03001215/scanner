@@ -152,6 +152,26 @@
   .ovseg button + button { border-left: 1px solid var(--border); }
   .ovseg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
   .ovseg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* ---- RL card ---- */
+  .rlrow { display: grid; grid-template-columns: auto 1fr; gap: 14px 22px; align-items: start; }
+  @media (max-width: 720px) { .rlrow { grid-template-columns: 1fr; } }
+  .badge.LONG { background: var(--bull-bg); color: var(--bull); } .badge.SHORT { background: var(--bear-bg); color: var(--bear); } .badge.FLAT { background: var(--neutral-bg); color: var(--ink-2); }
+  .badge.LONG::before { content: "▲"; } .badge.SHORT::before { content: "▼"; } .badge.FLAT::before { content: "■"; }
+  .qbars { display: grid; grid-template-columns: 48px 1fr 70px; gap: 4px 8px; align-items: center; font-size: 12px; margin-top: 8px; }
+  .qbars .tr { position: relative; height: 12px; background: var(--neutral-bg); border-radius: 3px; }
+  .qbars .fl { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--accent); opacity: .85; }
+  .qbars .fl.neg { background: var(--bear); } .qbars .zero { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--ink-3); }
+  .qbars .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .rlpath { display: grid; grid-template-columns: repeat(48, 1fr); gap: 2px; margin-top: 6px; }
+  .rlpath i { display: block; height: 12px; border-radius: 2px; background: var(--neutral-bg); }
+  .rlpath i.L { background: var(--bull); } .rlpath i.S { background: var(--bear); } .rlpath i.lose { opacity: .35; }
+  .rlstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 14px; font-size: 12.5px; margin-top: 4px; }
+  .rlstats div { border-top: 1px solid var(--border); padding-top: 6px; }
+  .rlstats .k { color: var(--ink-3); font-size: 11.5px; } .rlstats .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .rlstats .v.neg { color: var(--bear); } .rlstats .v.pos { color: var(--bull); }
+  .verdict-note { border-radius: 8px; padding: 8px 12px; font-size: 12.5px; margin-top: 10px; background: var(--neutral-bg); color: var(--ink-2); }
+  .verdict-note.warn { background: var(--bear-bg); color: var(--bear); } .verdict-note.ok { background: var(--bull-bg); color: var(--bull); }
 </style>
 </head>
 <body>
@@ -244,6 +264,29 @@
         <div class="sub" id="llmTrack" style="margin:8px 0 0"></div>
       </div>
       <div id="llmOff" class="off" hidden></div>
+    </section>
+
+    <section class="card span2" id="rlCard">
+      <div class="charthead"><h2>4 · Reinforcement learning</h2><span class="sub" id="rlMeta" style="margin:0">–</span></div>
+      <div class="sub">An offline fitted Q-iteration policy chooses long, flat or short for the next candle. It was trained on the fee-adjusted return with 5 bp paid per side on every position change, so it learns when a call is worth trading, not just its direction. Values are in basis points (1 bp = 0.01%).</div>
+      <div id="rlBody" hidden>
+        <div class="rlrow">
+          <div>
+            <div class="verdict" style="margin:4px 0 6px"><span id="rlBadge" class="badge FLAT">–</span>
+              <div><div style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums"><span id="rlEdge">–</span></div><div class="sub" style="margin:0">edge vs staying flat</div></div></div>
+            <div class="sub" id="rlPos" style="margin:0"></div>
+          </div>
+          <div>
+            <div class="sub" style="margin:0 0 2px">Expected discounted return by action</div>
+            <div class="qbars" id="rlQ"></div>
+          </div>
+        </div>
+        <div class="sub" style="margin:12px 0 0">Policy path over the last 48 closed candles, oldest left: green long, red short, grey flat, faded when that candle went against the position. Hover for details.</div>
+        <div class="rlpath" id="rlPath"></div>
+        <div class="rlstats" id="rlStats"></div>
+        <div class="verdict-note" id="rlNote"></div>
+      </div>
+      <div id="rlOff" class="off" hidden></div>
     </section>
 
     <section class="card span2" style="padding:12px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -345,7 +388,7 @@ function setInterval_(tf) {
   if (tf === interval) return;
   interval = tf; lastKey = null; nextCloseTs = null;
   try { localStorage.setItem('btcpred.interval', tf); } catch (e) {}
-  syncToggle(); llmShown = null; llmDescribe(); llmIdle(''); load(); loadBacktest();
+  syncToggle(); llmShown = null; rlShown = null; llmDescribe(); llmIdle(''); load(); loadBacktest();
 }
 function syncToggle() {
   document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tf === interval)));
@@ -572,7 +615,7 @@ async function load() {
     const d = await r.json();
     if (tf !== interval) return;  // user switched while this request was in flight
     if (d.last_closed_candle !== lastKey) { lastKey = d.last_closed_candle; render(d); }
-    llmSync();
+    llmSync(); loadRL();
     $('status').textContent = 'updated ' + new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()) + ' ET';
   } catch (e) {
     $('error').hidden = false; $('error').textContent = 'Could not load prediction: ' + e.message;
@@ -675,6 +718,52 @@ function ovTick() {
   let due = false;
   document.querySelectorAll('[data-close]').forEach(el => { const left = +el.dataset.close - Date.now() / 1000; el.textContent = ovClock(left); if (left <= 0) due = true; });
   if (due && !ovTick.wait) { ovTick.wait = true; setTimeout(() => { ovTick.wait = false; loadOverview(); }, 4000); }
+}
+
+// ================= reinforcement learning card =================
+let rlShown = null;
+async function loadRL() {
+  const tf = interval;
+  if (!lastKey || rlShown === tf + '|' + lastKey) return;
+  try {
+    const r = await fetch(`/api/rl?interval=${tf}`, { cache: 'no-store' });
+    const d = await r.json();
+    if (tf !== interval) return;
+    if (!r.ok) { $('rlBody').hidden = true; $('rlOff').hidden = false; $('rlOff').textContent = r.status === 404 ? `No RL policy trained for ${tf} yet.` : ('RL unavailable: ' + (d.detail || r.statusText)); $('rlMeta').textContent = ''; return; }
+    rlShown = tf + '|' + lastKey;
+    $('rlOff').hidden = true; $('rlBody').hidden = false;
+    const bp = x => (x >= 0 ? '+' : '') + Number(x).toFixed(1) + ' bp';
+    $('rlBadge').className = 'badge ' + d.action; $('rlBadge').textContent = d.action;
+    $('rlEdge').textContent = d.action === 'FLAT' ? '0.0 bp' : bp(d.edge_vs_flat_bp);
+    $('rlPos').textContent = d.changed ? `Position change: was ${['SHORT', 'FLAT', 'LONG'][d.previous_position + 1].toLowerCase()}, pays ${(Math.abs(d.position - d.previous_position) * d.cost_bp).toFixed(0)} bp in fees.` : `Holds the ${d.action.toLowerCase()} position from the previous candle, no fee.`;
+    const qs = ['LONG', 'FLAT', 'SHORT'].map(k => [k, d.q_bp[k]]); const m = Math.max(1, ...qs.map(q => Math.abs(q[1])));
+    $('rlQ').innerHTML = qs.map(([k, v]) => { const w = Math.abs(v) / m * 50; const left = v >= 0 ? 50 : 50 - w;
+      return `<span>${k}</span><div class="tr"><div class="zero" style="left:50%"></div><div class="fl ${v < 0 ? 'neg' : ''}" style="left:${left}%;width:${w}%"></div></div><span class="v">${bp(v)}</span>`; }).join('');
+    $('rlPath').innerHTML = d.path.slice(-48).map(p => { const cls = p.action === 1 ? 'L' : p.action === -1 ? 'S' : ''; const lose = p.action !== 0 && Math.sign(p.ret_bp) === -p.action;
+      return `<i class="${cls} ${lose ? 'lose' : ''}" title="${fmtHM(new Date(p.time * 1000))} ET · ${['short', 'flat', 'long'][p.action + 1]} · candle ${p.ret_bp >= 0 ? '+' : ''}${p.ret_bp} bp"></i>`; }).join('');
+    const t = d.test, ex = t.excess_over_drift_bp, exMin = Math.min(...ex), exMax = Math.max(...ex);
+    const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+    $('rlStats').innerHTML = [
+      ['Test window', `${t.test_start} → ${t.test_end}`, ''],
+      ['Test return after fees', bp(t.total_bp) + ` (${bp(t.per_day_bp)}/day)`, cls(t.total_bp)],
+      ['Buy and hold, same window', bp(t.buy_and_hold_bp), cls(t.buy_and_hold_bp)],
+      ['Excess over market drift, per seed', `${bp(exMin)} to ${bp(exMax)}`, cls(exMin)],
+      ['Seeds agree on action', pct(t.seed_agreement), t.seed_agreement >= 0.6 ? 'pos' : t.seed_agreement < 0.4 ? 'neg' : ''],
+      ['Return across seeds', `${bp(t.seed_mean_bp)} ± ${t.seed_std_bp.toFixed(0)}`, cls(t.seed_mean_bp)],
+      ['Sharpe (annualised)', t.sharpe == null ? '–' : t.sharpe.toFixed(2), t.sharpe > 0.5 ? 'pos' : t.sharpe < 0 ? 'neg' : ''],
+      ['Max drawdown', bp(-t.max_dd_bp).replace('+', ''), 'neg'],
+      ['Time in market', `${pct(t.time_in_market)} · long ${pct(t.long_share, 0)} / short ${pct(t.short_share, 0)}`, ''],
+      ['Direction accuracy when in market', pct(t.dir_accuracy), ''],
+      ['Position changes', `${t.position_changes.toLocaleString()} in ${Math.round(t.test_days)} days`, ''],
+    ].map(([k, v, c]) => `<div><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
+    const drift = ex.every(e => e > 0), lost = t.seed_mean_bp < 0;
+    const note = lost ? ['warn', 'On this timeframe the policy lost money on unseen data for every seed. Treat its action as noise.']
+      : !drift ? ['warn', 'Test profit here is explained mostly by BTC drifting upward while the policy was long; the seeds also disagree, so there is little evidence of learned skill.']
+      : t.seed_agreement < 0.5 ? ['', 'Positive after fees and beyond market drift for every seed, but the seeds choose different actions on most candles, so the specific call is uncertain.']
+      : ['ok', 'Positive after fees and beyond market drift for every seed, with reasonable seed agreement. Still a small sample of one market cycle; drawdowns were deep.'];
+    $('rlNote').className = 'verdict-note ' + note[0]; $('rlNote').textContent = note[1];
+    $('rlMeta').textContent = `for the candle opening ${fmtHM(parseApi(d.predicting_candle_open))} ET · policy trained ${d.trained_at.slice(0, 10)} · ${t.seeds} seeds · cost ${d.cost_bp} bp/side`;
+  } catch (e) { /* retry on next refresh */ }
 }
 
 function tickClock() {

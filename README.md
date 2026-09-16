@@ -8,7 +8,11 @@ independent methods on multi-year public kline data:
 2. **TA** - a vote of 18 classic technical-analysis signals (EMA, MACD, RSI,
    Stochastic, Bollinger, VWAP, candlestick patterns, support/resistance,
    volume and taker-flow), with per-signal weights calibrated on history.
-3. **LLM analyst** (optional) - a language model (OpenAI GPT-5 by default, or Claude)
+3. **RL policy** - an offline reinforcement-learning agent (fitted Q-iteration with a LightGBM
+   value function) that chooses long, flat or short for the next candle, trained on the
+   fee-adjusted return so it learns when a call is worth trading. Evaluated on a strict time
+   split against buy-and-hold and rule baselines, across several seeds.
+4. **LLM analyst** (optional) - a language model (OpenAI GPT-5 by default, or Claude)
    reads the last 48 closed candles plus an indicator snapshot and returns a call, a
    confidence, and a written reason. Needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
@@ -53,6 +57,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 |---|---|
 | `GET /api/overview` | All four timeframes at once: current ML/TA calls with confidence, gate status (agree, and agree + ML ≥ 0.10 + TA ≥ 0.3), the stored LLM result if any, a 25-candle results strip, and gate pass counts and accuracy for the backtest, live since training, last 7 days and last 24 hours. Cached for 15 s; never makes a paid LLM call; a failing timeframe is reported in its own entry |
 | `GET /api/predict?interval=1h&recent=96` | Live ML + TA prediction for the candle forming now, plus the last `recent` candles (16-500) with each method's call and outcome |
+| `GET /api/rl?interval=1h` | RL policy for the candle forming now: `action` (LONG/FLAT/SHORT), Q-values per action in bp, edge vs flat, position change and fee, the last 96 candles' position path, and the time-split `test` block (return after fees, buy-and-hold in the same window, excess over market drift per seed, seed agreement, Sharpe, drawdown, exposure) plus rule `baselines`. 404 until `train-rl` has run for that timeframe |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |
 | `GET /api/backtest?interval=1h` | Backtest summary: accuracy by month, by confidence, and when ML and TA agree |
@@ -194,6 +199,34 @@ is reachable from outside. For HTTPS, point a domain at the VPS, change
 
 Without any server changes, an SSH tunnel also works from your own machine:
 `ssh -L 8765:127.0.0.1:8765 developer@<vps-ip>` then open `http://localhost:8765`.
+
+## Reinforcement-learning policy
+
+```bash
+.venv/bin/python main.py train-rl -i 1h --days 2000        # train + strict time-split evaluation, 3 seeds
+.venv/bin/python main.py train-rl -i 4h --days 3300 --cost-bp 5 --gamma 0.9 --seeds 1 2 3 4 5
+```
+
+State = the 50 ML features plus the current position; actions = LONG / FLAT / SHORT for the next
+candle; reward = position × next-candle return − 5 bp per side on every position change. The
+Q-function is a heavily regularised LightGBM regressor refit for up to 8 fitted-Q iterations, with
+the iteration chosen on a validation slice inside the training window. The oldest 60% of history
+trains, the newest 40% tests; three seeds are trained so a policy that fits noise shows up as
+seed disagreement. Baselines on the same test window: buy-and-hold, always-short, ML every
+candle, the confidence gate for one candle, and gate-and-hold. The deployed policy is retrained
+on all data. Artifacts: `models/<tf>/rl/q_model.txt` and `report.json`.
+
+Results as of 2026-09-16 (test window is the newest 40% of each history, fees included):
+
+| Timeframe | Test return | Buy-and-hold | Excess over drift (seeds) | Seed agreement | Verdict |
+|---|---|---|---|---|---|
+| 4h | +11,053 bp over 3.6 y | +15,506 bp | +4,747 to +7,128 bp | 65% | positive for every seed, Sharpe ≈ 0.7, but drawdowns near 100 bp-of-notional and only one market cycle |
+| 1h | +3,358 bp over 2.2 y | +4,979 bp | −226 to +2,591 bp | 26% | profit mostly market drift; seeds disagree |
+| 15m | −3,279 bp | −2,417 bp | negative | 80% | loses money on unseen data for every seed |
+| 5m | see `models/5m/rl/report.json` | | | | |
+
+Direction accuracy when in the market is about 50–51% on every timeframe: whatever the 4h policy
+earns comes from timing exposure, not from calling direction better than the ML model.
 
 ## LLM analyst
 

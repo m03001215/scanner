@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from btcpred import backtest, data, features, llm, model, predictor, ta
+from btcpred import backtest, data, features, llm, model, predictor, rl, ta
 from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, history_path, model_dir, ta_report_path
 
 
@@ -138,6 +138,19 @@ def cmd_backtest_llm(args):
     print(f"saved to {out}")
 
 
+def cmd_train_rl(args):
+    """Offline fitted Q-iteration: learn long/flat/short with fees in the reward; strict time-split evaluation."""
+    df = data.drop_open_candle(data.load_or_update(cache_path(args.interval), interval=args.interval, days=args.days))
+    _, meta = model.load(model_dir(args.interval))
+    hist_path = predictor.history_path(args.interval)
+    hist = predictor.load_history(args.interval) if hist_path.exists() else None
+    res = rl.train_and_evaluate(args.interval, df, meta["features"], hist, cost_bp=args.cost_bp, gamma=args.gamma,
+                                iterations=args.iterations, rounds=args.rounds, train_frac=args.train_frac,
+                                seeds=tuple(args.seeds))
+    rl.save(res["model"], res["report"], rl.rl_dir(args.interval))
+    print(f"saved RL policy + report to {rl.rl_dir(args.interval)}")
+
+
 def cmd_predict(args):
     try:
         out = predictor.predict(interval=args.interval)
@@ -204,11 +217,15 @@ def main():
     s.add_argument("--rows", type=int, default=20, help="how many recent candles to print")
     s = add("backtest-llm", "replay the LLM analyst over the last N closed candles (paid API calls)")
     s.add_argument("--n", type=int, default=24); s.add_argument("--workers", type=int, default=4)
+    s = add("train-rl", "train the reinforcement-learning policy (fitted Q-iteration) and evaluate it on a time split")
+    s.add_argument("--days", type=int, default=730); s.add_argument("--cost-bp", type=float, default=5.0, help="fee per side in bp (default 5 = 10 bp round trip)")
+    s.add_argument("--gamma", type=float, default=0.9); s.add_argument("--iterations", type=int, default=8); s.add_argument("--rounds", type=int, default=200)
+    s.add_argument("--train-frac", type=float, default=0.6); s.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     s = add("predict", "predict direction of the next candle (ML + TA, optionally Claude)")
     s.add_argument("--json", action="store_true"); s.add_argument("--llm", action="store_true", help="also ask the LLM (needs OPENAI_API_KEY or ANTHROPIC_API_KEY)")
     args = ap.parse_args()
     {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest,
-     "backtest-llm": cmd_backtest_llm, "predict": cmd_predict}[args.cmd](args)
+     "backtest-llm": cmd_backtest_llm, "train-rl": cmd_train_rl, "predict": cmd_predict}[args.cmd](args)
 
 
 if __name__ == "__main__":

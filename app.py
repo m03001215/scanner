@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import data, llm, overview, predictor
+from btcpred import data, llm, overview, predictor, rl
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -139,6 +139,22 @@ def api_overview():
     """All timeframes at once: current ML/TA/LLM calls, gate status, recent results strip, and gate statistics
     (backtest, live since training, last 7 days, last 24 hours). Never makes a paid LLM call."""
     return overview.snapshot(LLM_AUTO)
+
+
+@app.get("/api/rl")
+def api_rl(interval: str = "15m"):
+    """Reinforcement-learning policy (offline fitted Q-iteration): LONG / FLAT / SHORT for the candle forming now,
+    Q-values in basis points, the recent position path, and the strict time-split test results with baselines."""
+    if interval not in predictor.INTERVALS:
+        raise HTTPException(status_code=404, detail=f"unsupported interval {interval!r}")
+    df = data.drop_open_candle(data.load_or_update(predictor.cache_path(interval), interval=interval,
+                                                   days=predictor.boot_days(interval)))
+    out = rl.predict_last(interval, df)
+    if out is None:
+        raise HTTPException(status_code=404, detail=f"no RL policy for {interval}; run `python main.py train-rl -i {interval}`")
+    step = pd.Timedelta(milliseconds=data.INTERVAL_MS[interval])
+    return dict(out, interval=interval, last_closed_candle=str(df["open_time"].iloc[-1]),
+                predicting_candle_open=str((df["close_time"].iloc[-1] + pd.Timedelta(milliseconds=1)).floor(step)))
 
 
 @app.get("/api/llm/status")
