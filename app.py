@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import calibration, data, llm, overview, predictor, rl
+from btcpred import calibration, data, intra, llm, overview, predictor, rl
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -85,6 +85,28 @@ async def _llm_scheduler() -> None:
         await asyncio.gather(*(loop.run_in_executor(None, _llm_job, iv, boundary) for iv in due), return_exceptions=True)
 
 
+INTRA_AUTO = [iv for iv in os.environ.get("BTCPRED_INTRA_AUTO", "15m").split(",") if iv.strip() in intra.MINUTES]
+INTRA_STATUS: dict = {iv: {} for iv in INTRA_AUTO}
+
+
+async def _intra_scheduler() -> None:
+    """Recompute the intra-candle v2 prediction once per minute and log it, so every candle gets a full path."""
+    loop = asyncio.get_running_loop()
+    while True:
+        now = pd.Timestamp.now(tz="UTC")
+        nxt = now.floor("min") + pd.Timedelta(minutes=1) + pd.Timedelta(seconds=8)
+        await asyncio.sleep(max(0.0, (nxt - now).total_seconds()))
+        for iv in INTRA_AUTO:
+            if intra.load(iv) is None:
+                continue
+            try:
+                out = await loop.run_in_executor(None, intra.snapshot, iv, True)
+                INTRA_STATUS[iv] = dict(last_run=out["now"], state=out["state"], minute=out.get("minute"), p=out.get("p_next"), error=None)
+            except Exception as e:  # noqa: BLE001
+                INTRA_STATUS[iv] = dict(last_run=pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"), error=f"{type(e).__name__}: {e}")
+                log.warning("intra scheduler %s: %s", iv, e)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for iv in predictor.INTERVALS:  # warm the data cache + model so the first page load is fast
@@ -93,6 +115,7 @@ async def lifespan(_: FastAPI):
             log.info("warm-up prediction done for %s", iv)
         except Exception as e:  # noqa: BLE001
             log.warning("warm-up failed for %s (will retry on request): %s", iv, e)
+    intra_task = asyncio.create_task(_intra_scheduler()) if INTRA_AUTO else None
     task = None
     if LLM_AUTO and llm.available():
         task = asyncio.create_task(_llm_scheduler())
@@ -102,6 +125,8 @@ async def lifespan(_: FastAPI):
     yield
     if task:
         task.cancel()
+    if intra_task:
+        intra_task.cancel()
 
 
 app = FastAPI(title="BTCUSDT 15m Predictor", lifespan=lifespan)
@@ -111,6 +136,33 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/intra")
+def intra_page():
+    return FileResponse(STATIC / "intra.html")
+
+
+@app.get("/api/intra")
+def api_intra(interval: str = "15m", candles: int = 96):
+    """Intra-candle v2: prediction for the NEXT candle from the forming candle's state right now, the minute-by-minute
+    probability path of the current candle, recent candles' paths with outcomes, the act-rule track record, and the
+    walk-forward report by minute. Separate model and log from the at-close predictors."""
+    if interval not in intra.MINUTES:
+        raise HTTPException(status_code=404, detail=f"intra model supports {list(intra.MINUTES)}")
+    loaded = intra.load(interval)
+    if loaded is None:
+        raise HTTPException(status_code=404, detail=f"no intra model for {interval}; run `python main.py train-intra -i {interval}`")
+    _, meta = loaded
+    try:
+        snap = intra.snapshot(interval, record=False)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"snapshot failed: {type(e).__name__}: {e}")
+    hist = intra.history(interval, candles=min(max(candles, 8), 500))
+    rep = meta["report"]
+    return dict(snap, history=hist, scheduler=INTRA_STATUS.get(interval, {}), auto=interval in INTRA_AUTO,
+                model=dict(trained_at=meta["trained_at"], days=meta["days"], label=meta["label"], candles=rep["candles"],
+                           by_minute=rep["by_minute"], act_rule=rep["act_rule"], final_minute=rep["final_minute"], folds=rep["folds"]))
 
 
 @app.get("/healthz")

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTCUSDT Intra-candle v2</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb; --border: #e6e5e1; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8985;
+    --bull: #0ca30c; --bear: #d03b3b; --accent: #2a78d6; --bull-bg: #e8f6e8; --bear-bg: #fbe9e9; --neutral-bg: #f0efec; --grid: #ecebe7;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --page: #0d0d0d; --surface: #1a1a19; --border: #2c2c2a; --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8985;
+    --bull-bg: #123a12; --bear-bg: #3f1717; --neutral-bg: #383835; --grid: #262624; --accent: #3987e5; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin-bottom: 14px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .v2 { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; background: var(--accent); color: #fff; vertical-align: 2px; }
+  .meta { color: var(--ink-2); font-size: 13px; } .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  a.back { color: var(--accent); font-weight: 600; text-decoration: none; margin-left: auto; font-size: 13px; }
+  .note { background: var(--neutral-bg); color: var(--ink-2); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 14px; max-width: 100%; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .span2 { grid-column: 1 / -1; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+  .card h2 { margin: 0 0 4px; font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-2); }
+  .sub { color: var(--ink-3); font-size: 12px; margin-bottom: 12px; }
+  .badge { font-size: 22px; font-weight: 700; padding: 8px 16px; border-radius: 8px; letter-spacing: .02em; display: inline-block; }
+  .badge.BULLISH { background: var(--bull-bg); color: var(--bull); } .badge.BEARISH { background: var(--bear-bg); color: var(--bear); } .badge.NONE { background: var(--neutral-bg); color: var(--ink-2); }
+  .badge.BULLISH::before { content: "▲ "; } .badge.BEARISH::before { content: "▼ "; }
+  .verdict { display: flex; align-items: center; gap: 14px; margin: 8px 0 12px; flex-wrap: wrap; }
+  .big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; } .kv dt { color: var(--ink-2); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .prog { position: relative; height: 12px; background: var(--neutral-bg); border-radius: 6px; margin: 8px 0 4px; overflow: hidden; }
+  .prog .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+  .ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+  .fire { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); }
+  .fire .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-3); } .fire.yes .dot { background: var(--bull); }
+  svg text { font-size: 11px; fill: var(--ink-3); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--ink-2); font-weight: 600; } td.num, th.num { text-align: right; }
+  .up { color: var(--bull); } .down { color: var(--bear); } .flat { color: var(--ink-3); }
+  .tick { font-weight: 700; } .tick.hit { color: var(--bull); } .tick.miss { color: var(--bear); }
+  .scroll { overflow-x: auto; }
+  .spark { display: inline-block; vertical-align: middle; }
+  .err { background: var(--bear-bg); color: var(--bear); padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
+  footer { margin-top: 22px; color: var(--ink-3); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>BTCUSDT · 15m intra-candle predictor <span class="v2">V2</span></h1>
+    <span class="meta">Forming candle: <b id="forming">–</b></span>
+    <span class="meta">Predicting the <b>next</b> candle: <b id="target">–</b></span>
+    <span class="meta" id="status"></span>
+    <a class="back" href="/">← At-close predictors (v1)</a>
+  </header>
+  <div class="note">This version predicts the candle <b>after</b> the one forming now, and updates every minute as the forming candle develops. It is a separate model with its own log; nothing on the v1 dashboard uses it. Label: next candle close &gt; open on Binance. Times in Eastern Time.</div>
+  <div id="error" class="err" hidden></div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Current call for the next candle</h2>
+      <div class="sub" id="callSub">–</div>
+      <div class="verdict"><span id="badge" class="badge NONE">–</span>
+        <div><div class="big" id="p">–</div><div class="sub" style="margin:0">P(next candle bullish)</div></div></div>
+      <div class="prog"><div class="fill" id="progFill" style="width:0%"></div></div>
+      <div class="ticks"><span>minute 0</span><span id="minuteLabel">–</span><span>15</span></div>
+      <dl class="kv" style="margin-top:12px">
+        <dt>Confidence</dt><dd id="conf">–</dd>
+        <dt>Act rule</dt><dd><span id="fire" class="fire"><span class="dot"></span><span id="fireText">–</span></span></dd>
+        <dt>Forming candle so far</dt><dd id="formingStats">–</dd>
+        <dt>Next candle opens in</dt><dd id="countdown">–</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Probability path, this candle</h2>
+      <div class="sub">P(next bullish) at each minute of the forming candle. The shaded band is the act threshold (confidence ≥ <span id="thr">0.10</span>).</div>
+      <div id="pathChart"></div>
+    </section>
+
+    <section class="card span2">
+      <h2>Live track record on this server</h2>
+      <div class="sub">The act rule fires at the first minute confidence reaches the threshold. Final = the call at minute 14.</div>
+      <dl class="kv" id="track"></dl>
+    </section>
+
+    <section class="card span2">
+      <h2>Recent candles</h2>
+      <div class="sub">Each row is one target candle: the path of P(bullish) through the forming candle, when the rule fired, and what happened.</div>
+      <div class="scroll"><table id="recent"><thead><tr><th>Target candle ET</th><th>Path (min 1 → 14)</th><th>Fired</th><th class="num">Lead</th><th>Call</th><th class="num">Final p</th><th>Actual</th><th>Rule</th><th>Final</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="card span2">
+      <h2>Backtest by minute</h2>
+      <div class="sub" id="btSub">–</div>
+      <div class="scroll"><table id="byMinute"><thead><tr><th class="num">Minute</th><th class="num">Lead</th><th class="num">Accuracy</th><th class="num">Confident share</th><th class="num">Confident accuracy</th></tr></thead><tbody></tbody></table></div>
+      <div class="sub" id="ruleSub" style="margin-top:10px"></div>
+    </section>
+  </div>
+  <footer>Data: Binance public klines (15m and 1m). Refreshes every 20 s; the server recomputes once per minute. Not financial advice.</footer>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const TZ = 'America/New_York';
+const fmt = (d, o) => new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour12: false, ...o }).format(d);
+const parseApi = s => new Date(String(s).replace(' ', 'T').replace(/Z$/, '+00:00'));
+const hm = s => fmt(parseApi(s), { hour: '2-digit', minute: '2-digit' });
+const dhm = s => fmt(parseApi(s), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+const pct = x => x == null ? '–' : (x * 100).toFixed(1) + '%';
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let targetCloseTs = null, formingCloseTs = null, thr = 0.10;
+
+function pathSvg(mins, ps, W, H, thick) {
+  const m = { l: 34, r: 8, t: 8, b: 18 }, lo = 0.35, hi = 0.65, n = 14;
+  const X = k => m.l + (k - 1) * (W - m.l - m.r) / (n - 1), Y = v => m.t + (hi - Math.max(lo, Math.min(hi, v))) * (H - m.t - m.b) / (hi - lo);
+  const band = `<rect x="${m.l}" y="${Y(0.5 + thr / 2)}" width="${W - m.l - m.r}" height="${Y(0.5 - thr / 2) - Y(0.5 + thr / 2)}" fill="${css('--neutral-bg')}"/>`;
+  const mid = `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(0.5)}" y2="${Y(0.5)}" stroke="${css('--ink-3')}" stroke-dasharray="3 3"/>`;
+  const pts = mins.map((k, i) => `${X(k)},${Y(ps[i])}`).join(' ');
+  const dots = mins.map((k, i) => `<circle cx="${X(k)}" cy="${Y(ps[i])}" r="${thick ? 3.5 : 2}" fill="${ps[i] >= 0.5 ? css('--bull') : css('--bear')}"/>`).join('');
+  const axis = thick ? [0.4, 0.5, 0.6].map(v => `<text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(2)}</text>`).join('') + [1, 5, 10, 14].map(k => `<text x="${X(k)}" y="${H - 4}" text-anchor="middle">${k}</text>`).join('') : '';
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="spark">${band}${mid}<polyline points="${pts}" fill="none" stroke="${css('--accent')}" stroke-width="${thick ? 2 : 1.2}"/>${dots}${axis}</svg>`;
+}
+
+function render(d) {
+  $('error').hidden = true; thr = d.conf_act; $('thr').textContent = thr.toFixed(2);
+  $('forming').textContent = `${hm(d.forming_candle_open)} ET · minute ${d.minute} of ${d.minutes_total}`;
+  $('target').textContent = `${hm(d.target_candle_open)}–${hm(d.target_candle_close)} ET`;
+  targetCloseTs = d.target_close_ts; formingCloseTs = d.forming_close_ts;
+  $('progFill').style.width = (d.minute / d.minutes_total * 100) + '%'; $('minuteLabel').textContent = `minute ${d.minute} · ${d.lead_min} min before the next candle opens`;
+  if (d.state !== 'forming') {
+    $('badge').className = 'badge NONE'; $('badge').textContent = 'waiting'; $('p').textContent = '–'; $('conf').textContent = '–'; $('callSub').textContent = d.message;
+    $('fire').className = 'fire'; $('fireText').textContent = '–'; $('formingStats').textContent = '–';
+  } else {
+    $('badge').className = 'badge ' + d.prediction; $('badge').textContent = d.prediction; $('p').textContent = d.p_next.toFixed(3);
+    $('conf').textContent = pct(d.confidence);
+    $('callSub').textContent = `Computed ${fmt(parseApi(d.now), { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ET from the last closed candle plus the first ${d.minute} minute(s) of the forming candle.`;
+    $('fire').className = 'fire ' + (d.fires ? 'yes' : ''); $('fireText').textContent = d.fires ? `fires now: confidence ${pct(d.confidence)} ≥ ${thr.toFixed(2)}` : `not yet: confidence ${pct(d.confidence)} < ${thr.toFixed(2)}`;
+    const f = d.forming; $('formingStats').textContent = `open ${f.open.toLocaleString()} · last ${f.last.toLocaleString()} (${f.ret_bp >= 0 ? '+' : ''}${f.ret_bp} bp) · high ${f.high.toLocaleString()} · low ${f.low.toLocaleString()}`;
+  }
+  const cur = d.history.current_path;
+  $('pathChart').innerHTML = cur && cur.p.length ? pathSvg(cur.minutes, cur.p, Math.max(320, $('pathChart').clientWidth || 480), 170, true) : '<div class="sub">No minutes recorded yet for this candle.</div>';
+  const r = d.history.rule;
+  $('track').innerHTML = [
+    ['Act-rule calls made', r.calls], ['Resolved', r.resolved], ['Act-rule hit rate', pct(r.hit_rate)],
+    ['Final-minute calls resolved', r.final_resolved], ['Final-minute hit rate', pct(r.final_hit_rate)],
+    ['Server scheduler', d.scheduler.error ? 'error: ' + d.scheduler.error : (d.scheduler.last_run ? `last run ${fmt(parseApi(d.scheduler.last_run), { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ET` : (d.auto ? 'starting' : 'off'))],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  const dir = v => v == null ? '<span class="flat">–</span>' : v ? '<span class="up">bull</span>' : '<span class="down">bear</span>';
+  const tick = v => v == null ? '<span class="flat">–</span>' : (v ? '<span class="tick hit">✓</span>' : '<span class="tick miss">✗</span>');
+  $('recent').querySelector('tbody').innerHTML = d.history.paths.slice().reverse().slice(0, 40).map(p => `<tr>
+    <td>${dhm(p.target)}</td><td>${pathSvg(p.minutes, p.p, 150, 30, false)}</td>
+    <td>${p.call ? 'min ' + p.call.minute : '<span class="flat">no</span>'}</td><td class="num">${p.call ? p.call.lead_min + ' min' : '–'}</td>
+    <td>${p.call ? dir(p.call.direction === 'BULLISH' ? 1 : 0) : '<span class="flat">–</span>'}</td><td class="num">${p.final_p.toFixed(3)}</td>
+    <td>${p.actual == null ? '<span class="flat">forming…</span>' : dir(p.actual)}</td><td>${tick(p.call_hit)}</td><td>${tick(p.final_hit)}</td></tr>`).join('');
+  const m = d.model;
+  $('btSub').textContent = `Walk-forward out of sample on ${m.candles.toLocaleString()} candles (${m.days} days ending ${m.trained_at.slice(0, 10)}), 5 expanding folds. Accuracy = next-candle direction.`;
+  $('byMinute').querySelector('tbody').innerHTML = m.by_minute.map(b => `<tr><td class="num">${b.k}</td><td class="num">${b.lead_min} min</td><td class="num">${pct(b.acc)}</td><td class="num">${pct(b.conf_share)}</td><td class="num">${pct(b.conf_acc)}</td></tr>`).join('');
+  const a = m.act_rule;
+  $('ruleSub').textContent = `Act rule in the backtest: fires on ${pct(a.fired_share)} of candles, accuracy ${pct(a.acc)}, mean lead ${a.lead_mean_min.toFixed(1)} min. Final-minute call: ${pct(m.final_minute.acc)} on all candles, ${pct(m.final_minute.conf_acc)} when confident (${pct(m.final_minute.conf_share)} of candles).`;
+}
+async function load() {
+  $('status').textContent = 'refreshing…';
+  try {
+    const r = await fetch('/api/intra?interval=15m&candles=96', { cache: 'no-store' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    render(d); $('status').textContent = 'updated ' + fmt(new Date(), { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ET';
+  } catch (e) { $('error').hidden = false; $('error').textContent = 'Could not load: ' + e.message; $('status').textContent = ''; }
+}
+function tick() {
+  if (!formingCloseTs) return;
+  const s = Math.max(0, formingCloseTs - Date.now() / 1000);
+  $('countdown').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+load(); setInterval(load, 20000); setInterval(tick, 1000);
+</script>
+</body>
+</html>

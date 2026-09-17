@@ -58,6 +58,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 | `GET /api/overview` | All four timeframes at once: current ML/TA calls with confidence, gate status (agree, and agree + ML ≥ 0.10 + TA ≥ 0.3), the stored LLM result if any, a 25-candle results strip, and gate pass counts and accuracy for the backtest, live since training, last 7 days and last 24 hours. Cached for 15 s; never makes a paid LLM call; a failing timeframe is reported in its own entry |
 | `GET /api/predict?interval=1h&recent=96` | Live ML + TA prediction for the candle forming now, plus the last `recent` candles (16-500) with each method's call and outcome |
 | `GET /api/calibration/{interval}` | Current p_bullish calibrator: version (`<model hash>-<timestamp>`), label mode (`settlement` or `binance`), the raw → calibrated lookup table (201 points), the isotonic breakpoints and Platt parameters, the held-out reliability tables it was validated on, and `stale` (true when the model has been retrained since the calibrator was fit) |
+| `GET /api/intra?interval=15m` | Intra-candle v2: prediction for the **next** candle from the forming candle's state at the current minute, the minute-by-minute probability path, recent candles' paths with outcomes, the act-rule track record, and the walk-forward report by minute. Separate model (`models/15m/intra/`) and log; page at `/intra` |
 | `GET /api/rl?interval=1h` | RL policy for the candle forming now: `action` (LONG/FLAT/SHORT), Q-values per action in bp, edge vs flat, position change and fee, the last 96 candles' position path, and the time-split `test` block (return after fees, buy-and-hold in the same window, excess over market drift per seed, seed agreement, Sharpe, drawdown, exposure) plus rule `baselines`. 404 until `train-rl` has run for that timeframe |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |
@@ -217,6 +218,32 @@ and `ml.calibration_n`; `p_bullish` itself is never changed, the consumer choose
 - **Method:** isotonic regression fitted to equal-count bin means with ≥ 1000 rows per step (plain per-row isotonic and Platt scaling are reported for comparison; plain isotonic overfits the fitting half badly on 5m). Fit on the first half of the OOS period, evaluated on the second; the deployed calibrator is refit on all OOS rows.
 - **Refit policy:** the calibrator refits automatically at the end of `train` and `backtest` for that interval and the version bumps each time; `/api/calibration/{tf}.stale` flags a calibrator older than the model.
 - **Outputs:** `reports/calibration_<tf>.md` with reliability diagrams (all rows, gated rows, by call direction), held-out Brier/ECE, fold stability; `reports/calibration_summary.md`; `calibrators/p_bullish_<tf>_<version>.json`; `models/<tf>/calibration.json` (served copy).
+
+## Intra-candle predictor (v2, separate page at `/intra`)
+
+The at-close predictors call the candle that has just opened. Version 2 predicts the candle
+**after** the one forming now, and re-evaluates every minute as the forming candle develops, so a
+call can be made 1-14 minutes before its target candle opens. State at minute k of the forming
+15m candle: the 50 standard features of the last *closed* candle, the forming candle's partial
+open/high/low/last/volume after k minutes (from 1-minute candles, `data/btcusdt_1m.parquet` for
+training, a small live 1m cache at run time), and k itself. One LightGBM model serves every k;
+label = next candle close > open on Binance. Trained with `main.py train-intra -i 15m`.
+
+Walk-forward out of sample (63,500 test candles from a 105,833-candle history, Sep 2023 - Sep 2026):
+
+| Lead before the target opens | Accuracy | Confident share (conf ≥ 0.10) | Confident accuracy |
+|---|---|---|---|
+| 14 min (minute 1) | 52.1% | 6.9% | 54.7% |
+| 10 min (minute 5) | 52.3% | 7.4% | 54.7% |
+| 5 min (minute 10) | 52.4% | 10.3% | 55.8% |
+| 1 min (minute 14) | 52.4% | 10.5% | 56.0% |
+| v1 at-close model, for reference | 52.8% | 25% | 55.9% |
+
+Act rule: act at the first minute where confidence ≥ 0.10. In the backtest it fires on 18.7% of
+candles, is right 54.4% of the time, and gives a mean lead of 10 minutes. The server recomputes
+once per minute (`BTCPRED_INTRA_AUTO`, default `15m`; empty string turns it off) and logs each
+minute to `data/intra_log_15m.jsonl`, so the page can show every candle's path and a live track
+record. Nothing on the v1 dashboard or in its API uses this model.
 
 ## Reinforcement-learning policy
 

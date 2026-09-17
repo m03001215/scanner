@@ -5,3 +5,6 @@ __pycache__/
 models/*/backtest.csv
 data/llm_log_*.jsonl
 models/*/llm_replay.csv
+data/intra_log_*.jsonl
+data/btcusdt_1m_live.parquet
+data/twap60_bulk/
