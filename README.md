@@ -59,6 +59,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 | `GET /api/predict?interval=1h&recent=96` | Live ML + TA prediction for the candle forming now, plus the last `recent` candles (16-500) with each method's call and outcome |
 | `GET /api/calibration/{interval}` | Current p_bullish calibrator: version (`<model hash>-<timestamp>`), label mode (`settlement` or `binance`), the raw → calibrated lookup table (201 points), the isotonic breakpoints and Platt parameters, the held-out reliability tables it was validated on, and `stale` (true when the model has been retrained since the calibrator was fit) |
 | `GET /api/intra?interval=15m` | Intra-candle v2: prediction for the **next** candle from the forming candle's state at the current minute, the minute-by-minute probability path, recent candles' paths with outcomes, the act-rule track record, and the walk-forward report by minute. Separate model (`models/15m/intra/`) and log; page at `/intra` |
+| `GET /api/intra10` | Intra-candle v3: same target as v2 (the next 15m candle) but the forming candle is described by 10-second bars and recomputed every 10 s. Separate model (`models/15m/intra10/`) and log; page at `/intra10`; includes v2's by-minute results for comparison |
 | `GET /api/rl?interval=1h` | RL policy for the candle forming now: `action` (LONG/FLAT/SHORT), Q-values per action in bp, edge vs flat, position change and fee, the last 96 candles' position path, and the time-split `test` block (return after fees, buy-and-hold in the same window, excess over market drift per seed, seed agreement, Sharpe, drawdown, exposure) plus rule `baselines`. 404 until `train-rl` has run for that timeframe |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |
@@ -244,6 +245,31 @@ candles, is right 54.4% of the time, and gives a mean lead of 10 minutes. The se
 once per minute (`BTCPRED_INTRA_AUTO`, default `15m`; empty string turns it off) and logs each
 minute to `data/intra_log_15m.jsonl`, so the page can show every candle's path and a live track
 record. Nothing on the v1 dashboard or in its API uses this model.
+
+## Intra-candle predictor v3: 10-second bars (separate page at `/intra10`)
+
+Same target and protocol as v2, but the forming candle is described by 10-second bars built from
+Binance 1-second klines (`data/bars10s/`, 9.9M bars from Aug 2023, no gaps), with 13 extra
+features: returns over the last 30/60/90/180 s, realised volatility, taker-buy share since open
+and over the last 60 s, volume rate, share of up bars, VWAP distance, drawdown and drawup, all in
+ATR units, plus elapsed seconds. Training rows are taken every 30 s of each candle (29 per candle,
+3.07M rows); the server recomputes every 10 s from live 1 s klines. Trained with
+`main.py train-intra10`; `BTCPRED_INTRA10_AUTO=0` turns the scheduler off.
+
+Walk-forward, 63,500 test candles, same folds as v2:
+
+| Elapsed | Lead | v3 accuracy | v3 confident (share) | v2 accuracy | v2 confident (share) |
+|---|---|---|---|---|---|
+| 60 s | 840 s | 51.8% | 54.3% (11%) | 52.1% | 54.7% (7%) |
+| 300 s | 600 s | 52.0% | 54.4% (13%) | 52.3% | 54.7% (7%) |
+| 600 s | 300 s | 52.4% | 55.3% (15%) | 52.4% | 55.8% (10%) |
+| 840 s | 60 s | 52.4% | 55.1% (15%) | 52.4% | 56.0% (11%) |
+
+Act rule (first step with confidence ≥ 0.10): v3 fires on 30% of candles at 53.7% with a mean lead
+of 662 s; v2 fires on 19% at 54.4% with a mean lead of 10 min. **The 10-second detail adds no
+accuracy**: v3 matches v2 at every lead within sampling error and its confident tier is broader
+but slightly less accurate. It exists to settle that question empirically and for the faster
+refresh; v2 remains the better choice on the evidence.
 
 ## Reinforcement-learning policy
 

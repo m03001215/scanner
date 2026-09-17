@@ -8,3 +8,5 @@ models/*/llm_replay.csv
 data/intra_log_*.jsonl
 data/btcusdt_1m_live.parquet
 data/twap60_bulk/
+data/intra10_log_*.jsonl
+data/bars10s/

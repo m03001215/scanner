@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BTCUSDT Intra-candle v2</title>
+<title>BTCUSDT Intra-candle v3</title>
 <style>
   :root {
     --page: #f9f9f7; --surface: #fcfcfb; --border: #e6e5e1; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8985;
@@ -52,14 +52,14 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>BTCUSDT · 15m intra-candle predictor <span class="v2">V2</span></h1>
+    <h1>BTCUSDT · 15m intra-candle predictor <span class="v2">V3 · 10 s</span></h1>
     <span class="meta">Forming candle: <b id="forming">–</b></span>
     <span class="meta">Predicting the <b>next</b> candle: <b id="target">–</b></span>
     <span class="meta" id="status"></span>
-    <a class="back" href="/">← At-close predictors (v1)</a>
-    <a class="back" href="/intra10" style="margin-left:0">10-second v3 →</a>
+    <a class="back" href="/intra">← Intra-candle v2 (1 min)</a>
+    <a class="back" href="/" style="margin-left:0">v1 →</a>
   </header>
-  <div class="note">This version predicts the candle <b>after</b> the one forming now, and updates every minute as the forming candle develops. It is a separate model with its own log; nothing on the v1 dashboard uses it. Label: next candle close &gt; open on Binance. Times in Eastern Time.</div>
+  <div class="note">Version 3 predicts the candle <b>after</b> the one forming now, like v2, but sees the forming candle as 10-second bars (returns over the last 30–180 s, taker-buy flow, realised volatility, VWAP distance) and recomputes every 10 seconds. Separate model and log; v1 and v2 are untouched. Label: next candle close &gt; open on Binance. Times in Eastern Time.</div>
   <div id="error" class="err" hidden></div>
 
   <div class="grid">
@@ -69,7 +69,7 @@
       <div class="verdict"><span id="badge" class="badge NONE">–</span>
         <div><div class="big" id="p">–</div><div class="sub" style="margin:0">P(next candle bullish)</div></div></div>
       <div class="prog"><div class="fill" id="progFill" style="width:0%"></div></div>
-      <div class="ticks"><span>minute 0</span><span id="minuteLabel">–</span><span>15</span></div>
+      <div class="ticks"><span>0 s</span><span id="minuteLabel">–</span><span>900 s</span></div>
       <dl class="kv" style="margin-top:12px">
         <dt>Confidence</dt><dd id="conf">–</dd>
         <dt>Act rule</dt><dd><span id="fire" class="fire"><span class="dot"></span><span id="fireText">–</span></span></dd>
@@ -80,30 +80,30 @@
 
     <section class="card">
       <h2>Probability path, this candle</h2>
-      <div class="sub">P(next bullish) at each minute of the forming candle. The shaded band is the act threshold (confidence ≥ <span id="thr">0.10</span>).</div>
+      <div class="sub">P(next bullish) every 10 seconds through the forming candle. The shaded band is the act threshold (confidence ≥ <span id="thr">0.10</span>).</div>
       <div id="pathChart"></div>
     </section>
 
     <section class="card span2">
       <h2>Live track record on this server</h2>
-      <div class="sub">The act rule fires at the first minute confidence reaches the threshold. Final = the call at minute 14.</div>
+      <div class="sub">The act rule fires at the first 10-second step where confidence reaches the threshold. Final = the last call before the candle closes.</div>
       <dl class="kv" id="track"></dl>
     </section>
 
     <section class="card span2">
       <h2>Recent candles</h2>
       <div class="sub">Each row is one target candle: the path of P(bullish) through the forming candle, when the rule fired, and what happened.</div>
-      <div class="scroll"><table id="recent"><thead><tr><th>Target candle ET</th><th>Path (min 1 → 14)</th><th>Fired</th><th class="num">Lead</th><th>Call</th><th class="num">Final p</th><th>Actual</th><th>Rule</th><th>Final</th></tr></thead><tbody></tbody></table></div>
+      <div class="scroll"><table id="recent"><thead><tr><th>Target candle ET</th><th>Path (0 → 900 s)</th><th>Fired at</th><th class="num">Lead</th><th>Call</th><th class="num">Final p</th><th>Actual</th><th>Rule</th><th>Final</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="card span2">
-      <h2>Backtest by minute</h2>
+      <h2>Backtest by elapsed time, v3 vs v2</h2>
       <div class="sub" id="btSub">–</div>
-      <div class="scroll"><table id="byMinute"><thead><tr><th class="num">Minute</th><th class="num">Lead</th><th class="num">Accuracy</th><th class="num">Confident share</th><th class="num">Confident accuracy</th></tr></thead><tbody></tbody></table></div>
+      <div class="scroll"><table id="byMinute"><thead><tr><th class="num">Elapsed</th><th class="num">Lead</th><th class="num">v3 accuracy</th><th class="num">v3 confident share</th><th class="num">v3 confident acc.</th><th class="num">v2 accuracy</th><th class="num">v2 confident acc.</th></tr></thead><tbody></tbody></table></div>
       <div class="sub" id="ruleSub" style="margin-top:10px"></div>
     </section>
   </div>
-  <footer>Data: Binance public klines (15m and 1m). Refreshes every 20 s; the server recomputes once per minute. Not financial advice.</footer>
+  <footer>Data: Binance public klines (15m and 1 s, aggregated to 10 s). Page refreshes every 10 s; the server recomputes every 10 s. Not financial advice.</footer>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -114,37 +114,38 @@ const hm = s => fmt(parseApi(s), { hour: '2-digit', minute: '2-digit' });
 const dhm = s => fmt(parseApi(s), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 const pct = x => x == null ? '–' : (x * 100).toFixed(1) + '%';
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-let targetCloseTs = null, formingCloseTs = null, thr = 0.10;
+let targetCloseTs = null, formingCloseTs = null, thr = 0.10; const NSEC = 900;
 
-function pathSvg(mins, ps, W, H, thick) {
-  const m = { l: 34, r: 8, t: 8, b: 18 }, lo = 0.35, hi = 0.65, n = 14;
-  const X = k => m.l + (k - 1) * (W - m.l - m.r) / (n - 1), Y = v => m.t + (hi - Math.max(lo, Math.min(hi, v))) * (H - m.t - m.b) / (hi - lo);
+function pathSvg(secs, ps, W, H, thick) {
+  const m = { l: 34, r: 8, t: 8, b: 18 }, lo = 0.35, hi = 0.65;
+  const X = e => m.l + (e - 10) * (W - m.l - m.r) / (NSEC - 20), Y = v => m.t + (hi - Math.max(lo, Math.min(hi, v))) * (H - m.t - m.b) / (hi - lo);
+  const mins = secs;
   const band = `<rect x="${m.l}" y="${Y(0.5 + thr / 2)}" width="${W - m.l - m.r}" height="${Y(0.5 - thr / 2) - Y(0.5 + thr / 2)}" fill="${css('--neutral-bg')}"/>`;
   const mid = `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(0.5)}" y2="${Y(0.5)}" stroke="${css('--ink-3')}" stroke-dasharray="3 3"/>`;
   const pts = mins.map((k, i) => `${X(k)},${Y(ps[i])}`).join(' ');
   const dots = mins.map((k, i) => `<circle cx="${X(k)}" cy="${Y(ps[i])}" r="${thick ? 3.5 : 2}" fill="${ps[i] >= 0.5 ? css('--bull') : css('--bear')}"/>`).join('');
-  const axis = thick ? [0.4, 0.5, 0.6].map(v => `<text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(2)}</text>`).join('') + [1, 5, 10, 14].map(k => `<text x="${X(k)}" y="${H - 4}" text-anchor="middle">${k}</text>`).join('') : '';
+  const axis = thick ? [0.4, 0.5, 0.6].map(v => `<text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(2)}</text>`).join('') + [60, 300, 600, 840].map(k => `<text x="${X(k)}" y="${H - 4}" text-anchor="middle">${k}s</text>`).join('') : '';
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="spark">${band}${mid}<polyline points="${pts}" fill="none" stroke="${css('--accent')}" stroke-width="${thick ? 2 : 1.2}"/>${dots}${axis}</svg>`;
 }
 
 function render(d) {
   $('error').hidden = true; thr = d.conf_act; $('thr').textContent = thr.toFixed(2);
-  $('forming').textContent = `${hm(d.forming_candle_open)} ET · minute ${d.minute} of ${d.minutes_total}`;
+  $('forming').textContent = `${hm(d.forming_candle_open)} ET · ${d.elapsed_sec} s of ${d.seconds_total}`;
   $('target').textContent = `${hm(d.target_candle_open)}–${hm(d.target_candle_close)} ET`;
   targetCloseTs = d.target_close_ts; formingCloseTs = d.forming_close_ts;
-  $('progFill').style.width = (d.minute / d.minutes_total * 100) + '%'; $('minuteLabel').textContent = `minute ${d.minute} · ${d.lead_min} min before the next candle opens`;
+  $('progFill').style.width = (d.elapsed_sec / d.seconds_total * 100) + '%'; $('minuteLabel').textContent = `${d.elapsed_sec} s elapsed · ${d.lead_sec} s before the next candle opens`;
   if (d.state !== 'forming') {
     $('badge').className = 'badge NONE'; $('badge').textContent = 'waiting'; $('p').textContent = '–'; $('conf').textContent = '–'; $('callSub').textContent = d.message;
     $('fire').className = 'fire'; $('fireText').textContent = '–'; $('formingStats').textContent = '–';
   } else {
     $('badge').className = 'badge ' + d.prediction; $('badge').textContent = d.prediction; $('p').textContent = d.p_next.toFixed(3);
     $('conf').textContent = pct(d.confidence);
-    $('callSub').textContent = `Computed ${fmt(parseApi(d.now), { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ET from the last closed candle plus the first ${d.minute} minute(s) of the forming candle.`;
+    $('callSub').textContent = `Computed ${fmt(parseApi(d.now), { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ET from the last closed candle plus the first ${d.elapsed_sec} s of the forming candle.`;
     $('fire').className = 'fire ' + (d.fires ? 'yes' : ''); $('fireText').textContent = d.fires ? `fires now: confidence ${pct(d.confidence)} ≥ ${thr.toFixed(2)}` : `not yet: confidence ${pct(d.confidence)} < ${thr.toFixed(2)}`;
-    const f = d.forming; $('formingStats').textContent = `open ${f.open.toLocaleString()} · last ${f.last.toLocaleString()} (${f.ret_bp >= 0 ? '+' : ''}${f.ret_bp} bp) · high ${f.high.toLocaleString()} · low ${f.low.toLocaleString()}`;
+    const f = d.forming; $('formingStats').textContent = `open ${f.open.toLocaleString()} · last ${f.last.toLocaleString()} (${f.ret_bp >= 0 ? '+' : ''}${f.ret_bp} bp) · high ${f.high.toLocaleString()} · low ${f.low.toLocaleString()} · taker-buy ${pct(f.taker_buy_share)}${f.taker_60 != null ? ' (last 60 s ' + pct(f.taker_60) + ')' : ''}`;
   }
   const cur = d.history.current_path;
-  $('pathChart').innerHTML = cur && cur.p.length ? pathSvg(cur.minutes, cur.p, Math.max(320, $('pathChart').clientWidth || 480), 170, true) : '<div class="sub">No minutes recorded yet for this candle.</div>';
+  $('pathChart').innerHTML = cur && cur.p.length ? pathSvg(cur.e, cur.p, Math.max(320, $('pathChart').clientWidth || 480), 170, true) : '<div class="sub">Nothing recorded yet for this candle.</div>';
   const r = d.history.rule;
   $('track').innerHTML = [
     ['Act-rule calls made', r.calls], ['Resolved', r.resolved], ['Act-rule hit rate', pct(r.hit_rate)],
@@ -154,20 +155,21 @@ function render(d) {
   const dir = v => v == null ? '<span class="flat">–</span>' : v ? '<span class="up">bull</span>' : '<span class="down">bear</span>';
   const tick = v => v == null ? '<span class="flat">–</span>' : (v ? '<span class="tick hit">✓</span>' : '<span class="tick miss">✗</span>');
   $('recent').querySelector('tbody').innerHTML = d.history.paths.slice().reverse().slice(0, 40).map(p => `<tr>
-    <td>${dhm(p.target)}</td><td>${pathSvg(p.minutes, p.p, 150, 30, false)}</td>
-    <td>${p.call ? 'min ' + p.call.minute : '<span class="flat">no</span>'}</td><td class="num">${p.call ? p.call.lead_min + ' min' : '–'}</td>
+    <td>${dhm(p.target)}</td><td>${pathSvg(p.e, p.p, 150, 30, false)}</td>
+    <td>${p.call ? p.call.e + ' s' : '<span class="flat">no</span>'}</td><td class="num">${p.call ? p.call.lead_sec + ' s' : '–'}</td>
     <td>${p.call ? dir(p.call.direction === 'BULLISH' ? 1 : 0) : '<span class="flat">–</span>'}</td><td class="num">${p.final_p.toFixed(3)}</td>
     <td>${p.actual == null ? '<span class="flat">forming…</span>' : dir(p.actual)}</td><td>${tick(p.call_hit)}</td><td>${tick(p.final_hit)}</td></tr>`).join('');
   const m = d.model;
   $('btSub').textContent = `Walk-forward out of sample on ${m.candles.toLocaleString()} candles (${m.days} days ending ${m.trained_at.slice(0, 10)}), 5 expanding folds. Accuracy = next-candle direction.`;
-  $('byMinute').querySelector('tbody').innerHTML = m.by_minute.map(b => `<tr><td class="num">${b.k}</td><td class="num">${b.lead_min} min</td><td class="num">${pct(b.acc)}</td><td class="num">${pct(b.conf_share)}</td><td class="num">${pct(b.conf_acc)}</td></tr>`).join('');
+  const v2 = {}; (m.v2_by_minute || []).forEach(b => { v2[b.k * 60] = b; });
+  $('byMinute').querySelector('tbody').innerHTML = m.by_step.map(b => { const c = v2[b.e]; return `<tr><td class="num">${b.e} s</td><td class="num">${b.lead_sec} s</td><td class="num">${pct(b.acc)}</td><td class="num">${pct(b.conf_share)}</td><td class="num">${pct(b.conf_acc)}</td><td class="num">${c ? pct(c.acc) : '<span class="flat">–</span>'}</td><td class="num">${c ? pct(c.conf_acc) : '<span class="flat">–</span>'}</td></tr>`; }).join('');
   const a = m.act_rule;
-  $('ruleSub').textContent = `Act rule in the backtest: fires on ${pct(a.fired_share)} of candles, accuracy ${pct(a.acc)}, mean lead ${a.lead_mean_min.toFixed(1)} min. Final-minute call: ${pct(m.final_minute.acc)} on all candles, ${pct(m.final_minute.conf_acc)} when confident (${pct(m.final_minute.conf_share)} of candles).`;
+  $('ruleSub').textContent = `Act rule in the backtest: fires on ${pct(a.fired_share)} of candles, accuracy ${pct(a.acc)}, mean lead ${Math.round(a.lead_mean_sec)} s. Last-step call (${m.final_step.e} s): ${pct(m.final_step.acc)} on all candles, ${pct(m.final_step.conf_acc)} when confident (${pct(m.final_step.conf_share)} of candles).`;
 }
 async function load() {
   $('status').textContent = 'refreshing…';
   try {
-    const r = await fetch('/api/intra?interval=15m&candles=96', { cache: 'no-store' });
+    const r = await fetch('/api/intra10?candles=96', { cache: 'no-store' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
     render(d); $('status').textContent = 'updated ' + fmt(new Date(), { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ET';
@@ -178,7 +180,7 @@ function tick() {
   const s = Math.max(0, formingCloseTs - Date.now() / 1000);
   $('countdown').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
-load(); setInterval(load, 20000); setInterval(tick, 1000);
+load(); setInterval(load, 10000); setInterval(tick, 1000);
 </script>
 </body>
 </html>

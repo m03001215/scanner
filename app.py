@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import calibration, data, intra, llm, overview, predictor, rl
+from btcpred import calibration, data, intra, intra10, llm, overview, predictor, rl
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -107,6 +107,26 @@ async def _intra_scheduler() -> None:
                 log.warning("intra scheduler %s: %s", iv, e)
 
 
+INTRA10_AUTO = os.environ.get("BTCPRED_INTRA10_AUTO", "1") not in ("", "0", "false", "off")
+INTRA10_STATUS: dict = {}
+
+
+async def _intra10_scheduler() -> None:
+    """v3: recompute every 10 s (3 s after each 10-second boundary) and log it."""
+    loop = asyncio.get_running_loop()
+    while True:
+        now = time.time(); nxt = (int(now) // 10 + 1) * 10 + 3
+        await asyncio.sleep(max(0.0, nxt - now))
+        if intra10.load() is None:
+            continue
+        try:
+            out = await loop.run_in_executor(None, intra10.snapshot, True)
+            INTRA10_STATUS.update(last_run=out["now"], state=out["state"], elapsed_sec=out.get("elapsed_sec"), p=out.get("p_next"), error=None)
+        except Exception as e:  # noqa: BLE001
+            INTRA10_STATUS.update(last_run=pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"), error=f"{type(e).__name__}: {e}")
+            log.warning("intra10 scheduler: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for iv in predictor.INTERVALS:  # warm the data cache + model so the first page load is fast
@@ -116,6 +136,7 @@ async def lifespan(_: FastAPI):
         except Exception as e:  # noqa: BLE001
             log.warning("warm-up failed for %s (will retry on request): %s", iv, e)
     intra_task = asyncio.create_task(_intra_scheduler()) if INTRA_AUTO else None
+    intra10_task = asyncio.create_task(_intra10_scheduler()) if INTRA10_AUTO else None
     task = None
     if LLM_AUTO and llm.available():
         task = asyncio.create_task(_llm_scheduler())
@@ -127,6 +148,8 @@ async def lifespan(_: FastAPI):
         task.cancel()
     if intra_task:
         intra_task.cancel()
+    if intra10_task:
+        intra10_task.cancel()
 
 
 app = FastAPI(title="BTCUSDT 15m Predictor", lifespan=lifespan)
@@ -163,6 +186,30 @@ def api_intra(interval: str = "15m", candles: int = 96):
     return dict(snap, history=hist, scheduler=INTRA_STATUS.get(interval, {}), auto=interval in INTRA_AUTO,
                 model=dict(trained_at=meta["trained_at"], days=meta["days"], label=meta["label"], candles=rep["candles"],
                            by_minute=rep["by_minute"], act_rule=rep["act_rule"], final_minute=rep["final_minute"], folds=rep["folds"]))
+
+
+@app.get("/intra10")
+def intra10_page():
+    return FileResponse(STATIC / "intra10.html")
+
+
+@app.get("/api/intra10")
+def api_intra10(candles: int = 96):
+    """Intra-candle v3 (10-second bars): next-candle prediction from the forming candle's state right now, the path of
+    the current candle at 10 s resolution, recent candles with outcomes, the act-rule record, and the walk-forward report."""
+    loaded = intra10.load()
+    if loaded is None:
+        raise HTTPException(status_code=404, detail="no v3 model; run `python main.py train-intra10`")
+    _, meta = loaded
+    try:
+        snap = intra10.snapshot(record=False)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"snapshot failed: {type(e).__name__}: {e}")
+    rep = meta["report"]
+    v2 = intra.load("15m"); v2_by_minute = v2[1]["report"]["by_minute"] if v2 else None
+    return dict(snap, history=intra10.history(min(max(candles, 8), 500)), scheduler=INTRA10_STATUS, auto=INTRA10_AUTO,
+                model=dict(trained_at=meta["trained_at"], days=meta["days"], label=meta["label"], candles=rep["candles"], by_step=rep["by_step"],
+                           act_rule=rep["act_rule"], final_step=rep["final_step"], folds=rep["folds"], v2_by_minute=v2_by_minute))
 
 
 @app.get("/healthz")
