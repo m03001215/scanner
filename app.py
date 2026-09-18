@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import calibration, data, early30, intra, intra10, llm, overview, predictor, rl
+from btcpred import calibration, data, early10, early30, intra, intra10, llm, overview, predictor, rl
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -154,6 +154,32 @@ async def _v4_scheduler() -> None:
         await asyncio.sleep(5)
 
 
+V5_AUTO = os.environ.get("BTCPRED_V5_AUTO", "1") not in ("", "0", "false", "off")
+V5_STATUS: dict = {}
+
+
+async def _v5_scheduler() -> None:
+    """v5: as the v4 scheduler but 10 s before every 15m boundary; retries faster because the window is short."""
+    loop = asyncio.get_running_loop()
+    while True:
+        tm = early10.timing(); call_at = tm["call_at"] if tm["elapsed"] < early10.CUT_SEC else tm["call_at"] + pd.Timedelta(minutes=15)
+        V5_STATUS["next_call_at"] = call_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+        await asyncio.sleep(max(0.0, (call_at - pd.Timestamp.now(tz="UTC")).total_seconds() + 1.0))
+        if early10.load() is None:
+            await asyncio.sleep(30); continue
+        for attempt in range(8):
+            try:
+                out = await loop.run_in_executor(None, early10.predict_now, True)
+                if out is not None:
+                    V5_STATUS.update(last_call=out["made_at"], last_target=out["target_candle_open"], last_lead_sec=out["lead_sec"], error=None); break
+            except Exception as e:  # noqa: BLE001
+                V5_STATUS.update(error=f"{type(e).__name__}: {e}"); log.warning("v5 scheduler: %s", e)
+            await asyncio.sleep(0.7)
+        else:
+            V5_STATUS.update(error="no complete 890 s of 1 s klines before the candle opened")
+        await asyncio.sleep(12)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for iv in predictor.INTERVALS:  # warm the data cache + model so the first page load is fast
@@ -165,6 +191,7 @@ async def lifespan(_: FastAPI):
     intra_task = asyncio.create_task(_intra_scheduler()) if INTRA_AUTO else None
     intra10_task = asyncio.create_task(_intra10_scheduler()) if INTRA10_AUTO else None
     v4_task = asyncio.create_task(_v4_scheduler()) if V4_AUTO else None
+    v5_task = asyncio.create_task(_v5_scheduler()) if V5_AUTO else None
     task = None
     if LLM_AUTO and llm.available():
         task = asyncio.create_task(_llm_scheduler())
@@ -180,6 +207,8 @@ async def lifespan(_: FastAPI):
         intra10_task.cancel()
     if v4_task:
         v4_task.cancel()
+    if v5_task:
+        v5_task.cancel()
 
 
 app = FastAPI(title="BTCUSDT 15m Predictor", lifespan=lifespan)
@@ -272,6 +301,38 @@ def api_v4(candles: int = 96):
                 latest=latest, latest_is_for_next_candle=state == "called", error=err, history=hist, scheduler=V4_STATUS, auto=V4_AUTO,
                 gate=dict(ml_min=early30.ML_GATE, ta_min=early30.TA_GATE),
                 model=dict(trained_at=meta["trained_at"], days=meta["days"], label=meta["label"], folds=meta["folds"], comparison=meta["comparison"]))
+
+
+@app.get("/v5")
+def v5_page():
+    return FileResponse(STATIC / "v5.html")
+
+
+@app.get("/api/v5")
+def api_v5(candles: int = 96):
+    """v5: as v4 but the call is made 10 s before the target candle opens (stand-in = first 890 s of the forming candle).
+    A request in the last 10 s of a candle makes the call if the scheduler hasn't yet."""
+    loaded = early10.load()
+    if loaded is None:
+        raise HTTPException(status_code=404, detail="no v5 model; run `python main.py train-v5`")
+    _, meta = loaded
+    tm = early10.timing(); latest, err = None, None
+    if tm["elapsed"] >= early10.CUT_SEC:
+        try:
+            latest = early10.predict_now(record=True)
+        except Exception as e:  # noqa: BLE001
+            err = f"{type(e).__name__}: {e}"
+    hist = early10.history(min(max(candles, 8), 500))
+    if latest is None and hist["rows"]:
+        latest = early10.load_log()[-1]
+    state = "called" if (latest and latest["target_candle_open"] == str(tm["target"])) else "waiting"
+    nxt = tm["call_at"] if tm["elapsed"] < early10.CUT_SEC else tm["call_at"] + pd.Timedelta(minutes=15)
+    v4 = early30.load(); v4c = v4[1]["comparison"]["v4"] if v4 else None
+    return dict(version="v5", interval="15m", state=state, now=tm["now"].strftime("%Y-%m-%dT%H:%M:%SZ"), forming_candle_open=str(tm["forming"]), next_target_open=str(tm["target"]),
+                elapsed_sec=round(tm["elapsed"], 1), cut_sec=early10.CUT_SEC, next_call_ts=int(nxt.timestamp()), target_open_ts=int(tm["target"].timestamp()),
+                latest=latest, latest_is_for_next_candle=state == "called", error=err, history=hist, scheduler=V5_STATUS, auto=V5_AUTO,
+                gate=dict(ml_min=early10.ML_GATE, ta_min=early10.TA_GATE),
+                model=dict(trained_at=meta["trained_at"], days=meta["days"], label=meta["label"], folds=meta["folds"], comparison=meta["comparison"], v4_reference=v4c))
 
 
 @app.get("/healthz")

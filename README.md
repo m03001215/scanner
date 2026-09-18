@@ -61,6 +61,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 | `GET /api/intra?interval=15m` | Intra-candle v2: prediction for the **next** candle from the forming candle's state at the current minute, the minute-by-minute probability path, recent candles' paths with outcomes, the act-rule track record, and the walk-forward report by minute. Separate model (`models/15m/intra/`) and log; page at `/intra` |
 | `GET /api/intra10` | Intra-candle v3: same target as v2 (the next 15m candle) but the forming candle is described by 10-second bars and recomputed every 10 s. Separate model (`models/15m/intra10/`) and log; page at `/intra10`; includes v2's by-minute results for comparison |
 | `GET /api/v4` | v4: v1's model and TA vote called 30 s before the target 15m candle opens, on a stand-in for the forming candle. Latest call (`p_bullish`, `prediction`, `confidence`, TA vote, gate), timing to the next call, logged calls with outcomes, and the paired walk-forward comparison with v1. A request in the last 30 s of a candle makes the call if the scheduler hasn't yet. Page at `/v4` |
+| `GET /api/v5` | v5: as v4 but the call is made 10 s before the target candle opens (stand-in = first 890 s). Same response shape as `/api/v4`, plus v4's backtest for reference. Page at `/v5` |
 | `GET /api/rl?interval=1h` | RL policy for the candle forming now: `action` (LONG/FLAT/SHORT), Q-values per action in bp, edge vs flat, position change and fee, the last 96 candles' position path, and the time-split `test` block (return after fees, buy-and-hold in the same window, excess over market drift per seed, seed agreement, Sharpe, drawdown, exposure) plus rule `baselines`. 404 until `train-rl` has run for that timeframe |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |
@@ -299,6 +300,31 @@ Paired test z = -3.03: v1 is still ahead, by 0.39 points, but v4 keeps 90% of v1
 gate passes. For comparison, v2 at −60 s and v3 at −10 s keep about half (`reports/early_call_comparison_15m.md`).
 Keeping v1's exact features, rather than adding partial-candle features beside the last closed candle, is
 what preserves the model's confidence.
+
+## v5: v1 called 10 s before the candle opens (separate page at `/v5`)
+
+Identical to v4 except the stand-in candle is cut at 890 s, so the call goes out 10 s before the target
+opens (7-9 s in practice: Binance publishes each 1 s kline about a second after it closes, and the call
+takes about a second). `btcpred/early10.py` loads a second, independent instance of the v4 module with
+`CUT_SEC=890`, its own model (`models/15m/v5`), TA weights and log. `main.py train-v5`; `BTCPRED_V5_AUTO=0`
+turns the scheduler off. The 890 s stand-in's close is a median 0.34 bp from the real close and has the forming
+candle's direction right 98.1% of the time.
+
+Paired walk-forward, identical 63,093 out-of-sample candles and folds:
+
+| | v5 at −10 s | v4 at −30 s | v1 at 0 s |
+|---|---|---|---|
+| Accuracy | 52.64% | 52.42% | 52.80% |
+| AUC | 0.540 | 0.538 | 0.541 |
+| Accuracy at confidence ≥ 0.10 (share) | 55.84% (26.0%) | 55.69% (20.6%) | 56.45% (22.3%) |
+| Gate pass rate | 21.31% | 16.99% | 18.90% |
+| Gated accuracy | 56.24% | 56.32% | 56.75% |
+| Paired test vs v1 (z) | -1.44 | -3.03 | – |
+
+At 10 s the difference from v1 is no longer statistically significant. v5's higher gate pass rate reflects its
+fold models being a little more confident at a fixed 0.10 threshold, not extra skill: its gated accuracy is
+slightly lower. Against v3, which also calls at −10 s but with separate partial-candle features, v5 is
+0.3 points more accurate and passes the gate twice as often.
 
 ## Reinforcement-learning policy
 

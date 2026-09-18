@@ -22,14 +22,15 @@ import requests
 from . import data, features, model, ta
 
 ROOT = Path(__file__).resolve().parent.parent
-N_SEC, CUT_SEC, BAR = 900, 870, 10
+NAME = "v4"                        # version tag: model dir, log file and messages. btcpred/early10.py loads a second copy of this
+N_SEC, CUT_SEC, BAR = 900, 870, 10  # module with NAME="v5" and CUT_SEC=890, so both versions share one implementation.
 N_CUT = CUT_SEC // BAR; SCALE = N_SEC / CUT_SEC
 WINDOW = 800                      # closed candles of context per row; EMA200's residual weight at 800 bars is 0.03%
 ML_GATE, TA_GATE = 0.10, 0.30
 
 
-def v4_dir() -> Path: return ROOT / "models" / "15m" / "v4"
-def log_path() -> Path: return ROOT / "data" / "v4_log_15m.jsonl"
+def v4_dir() -> Path: return ROOT / "models" / "15m" / NAME
+def log_path() -> Path: return ROOT / "data" / f"{NAME}_log_15m.jsonl"
 
 
 # ----------------------------------------------------------------------------- stand-in candles
@@ -92,7 +93,7 @@ def train(days: int = 1095, log=print) -> dict:
     if "trades" not in bars.columns: raise RuntimeError("bars10s lacks trades")
     df = df[df["open_time"] >= bars.index[0].floor("15min")].reset_index(drop=True)
     _, meta1 = model.load(ROOT / "models" / "15m" / "lgbm"); feats = meta1["features"]
-    log(f"[15m v4] {len(df):,} candles {df.open_time.iloc[0]:%Y-%m-%d} .. {df.open_time.iloc[-1]:%Y-%m-%d}; stand-in = first {CUT_SEC}s, volumes x{SCALE:.4f}")
+    log(f"[15m {NAME}] {len(df):,} candles {df.open_time.iloc[0]:%Y-%m-%d} .. {df.open_time.iloc[-1]:%Y-%m-%d}; stand-in = first {CUT_SEC}s, volumes x{SCALE:.4f}")
     X4, S4, st = build_dataset(df, bars, feats, log=log)
     y = features.build_labels(df); X1 = features.build_features(df)[feats]; S1 = ta.signals(df)
     ok = X4.notna().all(axis=1) & y.loc[X4.index].notna() & X1.loc[X4.index].notna().all(axis=1) & S4.notna().all(axis=1)
@@ -114,7 +115,7 @@ def train(days: int = 1095, log=print) -> dict:
                 ta_same=float((a4["direction"].values == a1["direction"].values)[ta4 & ta1].mean()), test_start=str(df.loc[Uo[0], "open_time"]), test_end=str(df.loc[Uo[-1], "open_time"]))
     mon = pd.DataFrame({"m": df.loc[Uo, "open_time"].dt.tz_convert(None).dt.to_period("M").astype(str).values, "v4": h4, "v1": h1, "g4": g4, "g1": g1})
     cmp_["monthly"] = [dict(month=m_, n=len(g), v4=float(g.v4.mean()), v1=float(g.v1.mean()), gate4=float(g.g4.mean()), gate1=float(g.g1.mean())) for m_, g in mon.groupby("m")]
-    for name, s in (("v4 at -30 s", s4), ("v1 at   0 s", s1)):
+    for name, s in ((f"{NAME} at -{N_SEC - CUT_SEC} s", s4), ("v1 at   0 s", s1)):
         log(f"  {name}: acc {s['acc']*100:.2f}%  auc {s['auc']:.3f}  conf>=.10 {s['conf10_acc']*100:.2f}% ({s['conf10_share']*100:.1f}%)  gate {s['gate_acc']*100:.2f}% pass {s['gate_share']*100:.2f}%")
     log(f"  paired: v1-only right {b:,}, v4-only right {c:,}, z {z:+.2f}; same direction {cmp_['same_direction']*100:.1f}%; TA same call {cmp_['ta_same']*100:.1f}%")
     rounds = int(np.median([f["best_iter"] for f in r4["folds"]])) or 200
@@ -164,7 +165,7 @@ def predict_now(record: bool = True, forming: pd.Timestamp | None = None) -> dic
     """Make the T-30 s call for the candle that opens next. Returns None if the first 870 s are not complete yet.
     `forming` overrides the forming candle (a past one) so the live path can be tested without waiting."""
     loaded = load()
-    if loaded is None: raise FileNotFoundError("no v4 model; run `python main.py train-v4`")
+    if loaded is None: raise FileNotFoundError(f"no {NAME} model; run `python main.py train-{NAME}`")
     booster, meta = loaded; tm = timing()
     if forming is not None: tm = dict(tm, forming=forming, target=forming + pd.Timedelta(minutes=15)); record = False
     key = str(tm["target"])
