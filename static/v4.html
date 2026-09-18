@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTCUSDT v4 · T−30 s</title>
+<style>
+  :root { --page:#f9f9f7; --surface:#fcfcfb; --border:#e6e5e1; --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#8a8985; --bull:#0ca30c; --bear:#d03b3b; --accent:#2a78d6; --bull-bg:#e8f6e8; --bear-bg:#fbe9e9; --neutral-bg:#f0efec; }
+  @media (prefers-color-scheme: dark) { :root { --page:#0d0d0d; --surface:#1a1a19; --border:#2c2c2a; --ink:#fff; --ink-2:#c3c2b7; --ink-3:#8a8985; --bull-bg:#123a12; --bear-bg:#3f1717; --neutral-bg:#383835; --accent:#3987e5; } }
+  * { box-sizing: border-box; } body { margin:0; background:var(--page); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:20px 16px 40px; } header { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 20px; margin-bottom:14px; }
+  h1 { font-size:20px; margin:0; font-weight:600; } .v { font-size:11px; font-weight:700; letter-spacing:.06em; padding:2px 7px; border-radius:999px; background:var(--accent); color:#fff; vertical-align:2px; }
+  .meta { color:var(--ink-2); font-size:13px; } .meta b { color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; } a.nav { color:var(--accent); font-weight:600; text-decoration:none; font-size:13px; }
+  .note { background:var(--neutral-bg); color:var(--ink-2); border-radius:8px; padding:10px 14px; font-size:13px; margin-bottom:14px; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); } .span2 { grid-column:1/-1; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 18px; min-width:0; }
+  .card h2 { margin:0 0 4px; font-size:13px; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--ink-2); } .sub { color:var(--ink-3); font-size:12px; margin-bottom:12px; }
+  .badge { font-size:22px; font-weight:700; padding:8px 16px; border-radius:8px; display:inline-block; } .badge.BULLISH { background:var(--bull-bg); color:var(--bull); } .badge.BEARISH { background:var(--bear-bg); color:var(--bear); } .badge.NONE, .badge.NEUTRAL { background:var(--neutral-bg); color:var(--ink-2); }
+  .badge.BULLISH::before { content:"▲ "; } .badge.BEARISH::before { content:"▼ "; }
+  .verdict { display:flex; align-items:center; gap:14px; margin:8px 0 12px; flex-wrap:wrap; } .big { font-size:26px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:13px; } .kv dt { color:var(--ink-2); } .kv dd { margin:0; font-variant-numeric:tabular-nums; }
+  .gatebar { border-radius:7px; padding:8px 12px; font-weight:600; margin:4px 0 10px; } .gatebar.pass.BULLISH { background:var(--bull); color:#fff; } .gatebar.pass.BEARISH { background:var(--bear); color:#fff; } .gatebar.no { background:var(--neutral-bg); color:var(--ink-2); }
+  .prog { position:relative; height:12px; background:var(--neutral-bg); border-radius:6px; margin:8px 0 4px; overflow:hidden; } .prog .fill { position:absolute; left:0; top:0; bottom:0; background:var(--accent); } .prog .cut { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); left:96.667%; }
+  .ticks { display:flex; justify-content:space-between; font-size:11px; color:var(--ink-3); }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; font-variant-numeric:tabular-nums; } th,td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--border); white-space:nowrap; } th { color:var(--ink-2); font-weight:600; } td.num,th.num { text-align:right; }
+  .up { color:var(--bull); } .down { color:var(--bear); } .flat { color:var(--ink-3); } .tick { font-weight:700; } .tick.hit { color:var(--bull); } .tick.miss { color:var(--bear); } .scroll { overflow-x:auto; }
+  tr.hl td { background:var(--bull-bg); font-weight:600; } .err { background:var(--bear-bg); color:var(--bear); padding:10px 14px; border-radius:8px; margin-bottom:14px; } footer { margin-top:22px; color:var(--ink-3); font-size:12px; }
+</style></head><body><div class="wrap">
+  <header><h1>BTCUSDT · 15m predictor <span class="v">V4 · T−30 s</span></h1>
+    <span class="meta">Forming candle: <b id="forming">–</b></span><span class="meta" id="status"></span>
+    <a class="nav" href="/" style="margin-left:auto">← v1</a><a class="nav" href="/intra">v2</a><a class="nav" href="/intra10">v3</a></header>
+  <div class="note">Version 4 is v1's model and TA vote, called <b>30 seconds before the target candle opens</b>. The candle still forming is replaced by a stand-in built from its first 870 seconds and treated as closed; everything else is identical to v1. Separate model, TA weights and log; v1–v3 are untouched. Times in Eastern Time.</div>
+  <div id="error" class="err" hidden></div>
+  <div class="grid">
+    <section class="card"><h2 id="callTitle">Latest call</h2><div class="sub" id="callSub">–</div>
+      <div id="gate" class="gatebar no">–</div>
+      <div class="verdict"><span id="badge" class="badge NONE">–</span><div><div class="big" id="p">–</div><div class="sub" style="margin:0">P(bullish)</div></div></div>
+      <dl class="kv"><dt>ML confidence</dt><dd id="conf">–</dd><dt>TA vote</dt><dd id="ta">–</dd><dt>Made</dt><dd id="made">–</dd><dt>Stand-in candle</dt><dd id="standin">–</dd></dl></section>
+    <section class="card"><h2>Timing</h2><div class="sub">The call is made at 870 s into the forming candle, 30 s before the next one opens.</div>
+      <div class="prog"><div class="fill" id="fill"></div><div class="cut"></div></div><div class="ticks"><span>0 s</span><span id="elapsed">–</span><span>870 · 900 s</span></div>
+      <dl class="kv" style="margin-top:12px"><dt>Next call in</dt><dd id="cdCall">–</dd><dt>Next candle opens in</dt><dd id="cdOpen">–</dd><dt>Scheduler</dt><dd id="sched">–</dd></dl></section>
+    <section class="card span2"><h2>Live track record on this server</h2><dl class="kv" id="track"></dl></section>
+    <section class="card span2"><h2>Recent calls</h2><div class="sub">Each call was made about 30 s before its candle opened.</div>
+      <div class="scroll"><table id="recent"><thead><tr><th>Target candle ET</th><th class="num">Lead</th><th class="num">p</th><th>ML</th><th class="num">Conf</th><th>TA</th><th>Gate</th><th>Actual</th><th>Result</th><th class="num">Stand-in vs real close</th></tr></thead><tbody></tbody></table></div></section>
+    <section class="card span2"><h2>Backtest: v4 at −30 s vs v1 at 0 s</h2><div class="sub" id="btSub">–</div>
+      <div class="scroll"><table id="cmp"></table></div><div class="sub" id="cmpNote" style="margin-top:10px"></div></section>
+    <section class="card span2"><h2>By month</h2><div class="scroll" style="max-height:360px;overflow-y:auto"><table id="monthly"><thead><tr><th>Month</th><th class="num">Candles</th><th class="num">v4 acc.</th><th class="num">v1 acc.</th><th class="num">v4 gate pass</th><th class="num">v1 gate pass</th></tr></thead><tbody></tbody></table></div></section>
+  </div><footer>Data: Binance public klines (15m history, 1 s klines for the stand-in). Refreshes every 5 s. Not financial advice.</footer></div>
+<script>
+const $ = id => document.getElementById(id), TZ = 'America/New_York';
+const fmt = (d, o) => new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour12: false, ...o }).format(d);
+const parseApi = s => new Date(String(s).replace(' ', 'T').replace(/Z$/, '+00:00')), hm = s => fmt(parseApi(s), { hour: '2-digit', minute: '2-digit' }), hms = s => fmt(parseApi(s), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const dhm = s => fmt(parseApi(s), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }), pct = (x, k = 1) => x == null ? '–' : (x * 100).toFixed(k) + '%';
+const dir = d => d === 'BULLISH' ? '<span class="up">▲ bull</span>' : d === 'BEARISH' ? '<span class="down">▼ bear</span>' : '<span class="flat">■ tie</span>';
+let nextCall = null, targetOpen = null;
+function render(d) {
+  $('error').hidden = !d.error; if (d.error) $('error').textContent = d.error;
+  $('forming').textContent = `${hm(d.forming_candle_open)} ET · ${Math.floor(d.elapsed_sec)} s of 900`; nextCall = d.next_call_ts; targetOpen = d.target_open_ts;
+  $('fill').style.width = Math.min(100, d.elapsed_sec / 9) + '%'; $('elapsed').textContent = `${Math.floor(d.elapsed_sec)} s elapsed`;
+  const L = d.latest;
+  if (!L) { $('callSub').textContent = 'No call yet. The first one is made 30 s before the next candle opens.'; }
+  else {
+    const forNext = d.latest_is_for_next_candle;
+    $('callTitle').textContent = forNext ? 'Call for the next candle' : 'Latest call (its candle has opened)';
+    $('callSub').textContent = `Target candle ${hm(L.target_candle_open)}–${hm(L.target_candle_close)} ET · made ${L.lead_sec} s before it opened`;
+    $('badge').className = 'badge ' + L.prediction; $('badge').textContent = L.prediction; $('p').textContent = L.p_bullish.toFixed(3); $('conf').innerHTML = `${pct(L.confidence)} ${L.gate.ml_ok ? '✓' : '✗'}`;
+    $('ta').innerHTML = `${dir(L.ta.prediction)} · score ${L.ta.score > 0 ? '+' : ''}${L.ta.score.toFixed(0)} · confidence ${pct(L.ta.confidence)} ${L.gate.ta_ok ? '✓' : '✗'}`;
+    $('made').textContent = hms(L.made_at) + ' ET'; const s = L.standin;
+    $('standin').textContent = `open ${s.open.toLocaleString()} · close ${s.close.toLocaleString()} (${s.ret_bp >= 0 ? '+' : ''}${s.ret_bp} bp) · high ${s.high.toLocaleString()} · low ${s.low.toLocaleString()} · ${s.seconds} s`;
+    const g = $('gate'); if (L.gate.passed) { g.className = 'gatebar pass ' + L.prediction; g.textContent = `Gate passed · ${L.prediction.toLowerCase()} (agree + confident)`; } else { g.className = 'gatebar no'; g.textContent = L.gate.agree ? 'ML and TA agree, below the confidence gate' : 'No agreement between ML and TA'; }
+  }
+  const sc = d.scheduler; $('sched').textContent = sc.error ? 'error: ' + sc.error : (sc.last_call ? `last call ${hms(sc.last_call)} ET, ${sc.last_lead_sec} s before the open` : (d.auto ? 'armed' : 'off'));
+  const r = d.history.record;
+  $('track').innerHTML = [['Calls made', r.calls], ['Resolved', r.resolved], ['Hit rate, all calls', pct(r.hit_rate)], ['Gate passes', r.gate_calls], ['Gate hit rate', `${pct(r.gate_hit_rate)} on ${r.gate_resolved}`], ['Stand-in called the forming candle\'s direction correctly', pct(r.standin_dir_match)]].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  $('recent').querySelector('tbody').innerHTML = d.history.rows.slice().reverse().slice(0, 40).map(x => `<tr><td>${dhm(x.target)}</td><td class="num">${x.lead_sec} s</td><td class="num">${x.p.toFixed(3)}</td><td>${dir(x.prediction)}</td><td class="num">${pct(x.confidence)}</td><td>${dir(x.ta)}</td><td>${x.gate ? '<b>pass</b>' : '<span class="flat">–</span>'}</td>
+    <td>${x.actual == null ? '<span class="flat">pending</span>' : dir(x.actual ? 'BULLISH' : 'BEARISH')}</td><td>${x.hit == null ? '<span class="flat">–</span>' : x.hit ? '<span class="tick hit">✓</span>' : '<span class="tick miss">✗</span>'}</td>
+    <td class="num">${x.real_close == null ? '–' : ((x.standin_close / x.real_close - 1) * 1e4).toFixed(2) + ' bp'}</td></tr>`).join('');
+  const c = d.model.comparison, a = c.v4, b = c.v1;
+  $('btSub').textContent = `Paired walk-forward on the identical ${c.n.toLocaleString()} out-of-sample candles (${c.test_start.slice(0, 10)} → ${c.test_end.slice(0, 10)}), same folds. Model trained ${d.model.trained_at.slice(0, 10)}.`;
+  const row = (k, f, hl) => `<tr class="${hl ? 'hl' : ''}"><td>${k}</td><td class="num">${f(a)}</td><td class="num">${f(b)}</td></tr>`;
+  $('cmp').innerHTML = `<thead><tr><th></th><th class="num">v4 at −30 s</th><th class="num">v1 at 0 s</th></tr></thead><tbody>` + row('Accuracy', s => pct(s.acc, 2)) + row('AUC', s => s.auc.toFixed(3)) + row('Log loss', s => s.logloss.toFixed(4)) +
+    row('Accuracy at confidence ≥ 0.10 (share)', s => `${pct(s.conf10_acc, 2)} (${pct(s.conf10_share)})`) + row('Accuracy at confidence ≥ 0.20 (share)', s => `${pct(s.conf20_acc, 2)} (${pct(s.conf20_share)})`) +
+    row('ML and TA agree (share)', s => `${pct(s.agree_acc, 2)} (${pct(s.agree_share)})`) + row('Gate pass rate', s => `${pct(s.gate_share, 2)} (${s.gate_n.toLocaleString()})`, true) + row('Gated accuracy', s => pct(s.gate_acc, 2), true) + '</tbody>';
+  const m = c.mcnemar; $('cmpNote').textContent = `Paired test: v1 right where v4 wrong on ${m.v1_only_right.toLocaleString()} candles, the reverse on ${m.v4_only_right.toLocaleString()}; z = ${m.z >= 0 ? '+' : ''}${m.z.toFixed(2)} (|z| ≥ 2 is significant). Same ML direction on ${pct(c.same_direction)} of candles; same TA call on ${pct(c.ta_same)}. Both gates pass on ${c.gate_both.toLocaleString()} candles (${pct(c.gate_both_acc)} accurate); v1 only ${c.gate_v1_only.toLocaleString()}, v4 only ${c.gate_v4_only.toLocaleString()}.`;
+  $('monthly').querySelector('tbody').innerHTML = c.monthly.slice().reverse().map(x => `<tr><td>${x.month}</td><td class="num">${x.n.toLocaleString()}</td><td class="num">${pct(x.v4)}</td><td class="num">${pct(x.v1)}</td><td class="num">${pct(x.gate4, 0)}</td><td class="num">${pct(x.gate1, 0)}</td></tr>`).join('');
+}
+async function load() { try { const r = await fetch('/api/v4?candles=96', { cache: 'no-store' }); const d = await r.json(); if (!r.ok) throw new Error(d.detail || r.statusText); render(d); $('status').textContent = 'updated ' + fmt(new Date(), { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ET'; } catch (e) { $('error').hidden = false; $('error').textContent = 'Could not load: ' + e.message; } }
+const clock = s => { s = Math.max(0, Math.floor(s)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+setInterval(() => { if (nextCall) { $('cdCall').textContent = clock(nextCall - Date.now() / 1000); $('cdOpen').textContent = clock(targetOpen - Date.now() / 1000); } }, 1000);
+load(); setInterval(load, 5000);
+</script></body></html>

@@ -60,6 +60,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 | `GET /api/calibration/{interval}` | Current p_bullish calibrator: version (`<model hash>-<timestamp>`), label mode (`settlement` or `binance`), the raw → calibrated lookup table (201 points), the isotonic breakpoints and Platt parameters, the held-out reliability tables it was validated on, and `stale` (true when the model has been retrained since the calibrator was fit) |
 | `GET /api/intra?interval=15m` | Intra-candle v2: prediction for the **next** candle from the forming candle's state at the current minute, the minute-by-minute probability path, recent candles' paths with outcomes, the act-rule track record, and the walk-forward report by minute. Separate model (`models/15m/intra/`) and log; page at `/intra` |
 | `GET /api/intra10` | Intra-candle v3: same target as v2 (the next 15m candle) but the forming candle is described by 10-second bars and recomputed every 10 s. Separate model (`models/15m/intra10/`) and log; page at `/intra10`; includes v2's by-minute results for comparison |
+| `GET /api/v4` | v4: v1's model and TA vote called 30 s before the target 15m candle opens, on a stand-in for the forming candle. Latest call (`p_bullish`, `prediction`, `confidence`, TA vote, gate), timing to the next call, logged calls with outcomes, and the paired walk-forward comparison with v1. A request in the last 30 s of a candle makes the call if the scheduler hasn't yet. Page at `/v4` |
 | `GET /api/rl?interval=1h` | RL policy for the candle forming now: `action` (LONG/FLAT/SHORT), Q-values per action in bp, edge vs flat, position change and fee, the last 96 candles' position path, and the time-split `test` block (return after fees, buy-and-hold in the same window, excess over market drift per seed, seed agreement, Sharpe, drawdown, exposure) plus rule `baselines`. 404 until `train-rl` has run for that timeframe |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |
@@ -270,6 +271,34 @@ of 662 s; v2 fires on 19% at 54.4% with a mean lead of 10 min. **The 10-second d
 accuracy**: v3 matches v2 at every lead within sampling error and its confident tier is broader
 but slightly less accurate. It exists to settle that question empirically and for the faster
 refresh; v2 remains the better choice on the evidence.
+
+## v4: v1 called 30 s before the candle opens (separate page at `/v4`)
+
+Everything is the same as v1 (the 50 features, LightGBM, the 18-signal TA vote and the Agree + Confident
+gate) except the moment of the call. At 870 s into the forming 15m candle, that candle is replaced by a
+**stand-in**: its open, running high and low, last price as the close, and volume, quote volume, trades and
+taker-buy scaled by 900/870. The stand-in is treated as closed, v1's features and TA signals are computed on
+it, and the model predicts the candle after it. The model is trained on the same construction for every
+historical candle (10-second bars, 105k rows), so train and serve match; TA weights are recalibrated on the
+stand-in signals. `main.py train-v4`; `BTCPRED_V4_AUTO=0` turns the scheduler off.
+
+The stand-in is a close proxy: its close is a median 1.25 bp from the real close, and it has the forming
+candle's direction right 96.2% of the time.
+
+Paired walk-forward against v1 on the identical 63,093 out-of-sample candles, same folds:
+
+| | v4 at −30 s | v1 at 0 s |
+|---|---|---|
+| Accuracy | 52.42% | 52.80% |
+| AUC | 0.538 | 0.541 |
+| Accuracy at confidence ≥ 0.10 (share) | 55.69% (20.6%) | 56.45% (22.3%) |
+| Gate pass rate | 16.99% | 18.90% |
+| Gated accuracy | 56.32% | 56.75% |
+
+Paired test z = -3.03: v1 is still ahead, by 0.39 points, but v4 keeps 90% of v1's
+gate passes. For comparison, v2 at −60 s and v3 at −10 s keep about half (`reports/early_call_comparison_15m.md`).
+Keeping v1's exact features, rather than adding partial-candle features beside the last closed candle, is
+what preserves the model's confidence.
 
 ## Reinforcement-learning policy
 

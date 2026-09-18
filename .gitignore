@@ -11,3 +11,4 @@ data/twap60_bulk/
 data/intra10_log_*.jsonl
 data/bars10s/
 data/compare_v*_preds.parquet
+data/v4_log_*.jsonl

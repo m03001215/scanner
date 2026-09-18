@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from btcpred import backtest, calibration, calibration_report, data, features, intra, intra10, llm, model, predictor, rl, ta
+from btcpred import backtest, calibration, calibration_report, data, early30, features, intra, intra10, llm, model, predictor, rl, ta
 from btcpred.predictor import INTERVALS, backtest_summary_path, cache_path, history_path, model_dir, ta_report_path
 
 
@@ -196,6 +196,12 @@ def cmd_train_intra10(args):
     print(f"saved to {intra10.v3_dir()}")
 
 
+def cmd_train_v4(args):
+    """v4: v1's features and TA on a stand-in candle cut 30 s before the close; paired walk-forward against v1."""
+    early30.train(args.days)
+    print(f"saved to {early30.v4_dir()}")
+
+
 def cmd_predict(args):
     try:
         out = predictor.predict(interval=args.interval)
@@ -271,11 +277,12 @@ def main():
     s = add("train-intra", "intra-candle v2: train + walk-forward evaluate the minute-by-minute next-candle model")
     s.add_argument("--days", type=int, default=1095)
     s = add("train-intra10", "intra-candle v3: 10-second bars, recomputed every 10 s (15m only)"); s.add_argument("--days", type=int, default=1095)
+    s = add("train-v4", "v4: v1 called 30 s before the candle opens, using a stand-in for the forming candle (15m only)"); s.add_argument("--days", type=int, default=1095)
     s = add("predict", "predict direction of the next candle (ML + TA, optionally Claude)")
     s.add_argument("--json", action="store_true"); s.add_argument("--llm", action="store_true", help="also ask the LLM (needs OPENAI_API_KEY or ANTHROPIC_API_KEY)")
     args = ap.parse_args()
     {"fetch": cmd_fetch, "train": cmd_train, "backtest-ta": cmd_backtest_ta, "backtest": cmd_backtest,
-     "backtest-llm": cmd_backtest_llm, "train-rl": cmd_train_rl, "calibrate": cmd_calibrate, "train-intra": cmd_train_intra, "train-intra10": cmd_train_intra10, "predict": cmd_predict}[args.cmd](args)
+     "backtest-llm": cmd_backtest_llm, "train-rl": cmd_train_rl, "calibrate": cmd_calibrate, "train-intra": cmd_train_intra, "train-intra10": cmd_train_intra10, "train-v4": cmd_train_v4, "predict": cmd_predict}[args.cmd](args)
 
 
 if __name__ == "__main__":
