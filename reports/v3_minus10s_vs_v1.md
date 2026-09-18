@@ -1,6 +1,6 @@
 # 15m: v3 at −10 s vs v1 at 0 s, paired walk-forward
 
-Run 2026-09-17 18:41 UTC. Target: the 15m candle's direction (close > open, Binance). **v1** predicts at the candle's open from the closed history; **v3** predicts the same candle 10 s earlier, from the closed history plus the first 890 s of the candle before it (10-second bars). Both are trained and scored on the identical 105,857 candles (2023-09-10 → 2026-09-16) with identical fold boundaries; the first 40% is the initial training block.
+Run 2026-09-17 19:03 UTC. Target: the 15m candle's direction (close > open, Binance). **v1** predicts at the candle's open from the closed history; **v3** predicts the same candle 10 s earlier, from the closed history plus the first 890 s of the candle before it (10-second bars). Both are trained and scored on the identical 105,857 candles (2023-09-10 → 2026-09-16) with identical fold boundaries; the first 40% is the initial training block.
 
 | Same target candles, out of sample (n = 63,515) | v1 at 0 s | v3 at −10 s |
 | --- | ---: | ---: |

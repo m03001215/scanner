@@ -84,4 +84,5 @@ if hs.any():
     g1 = (tadir[hs] == s1["d"][hs]) & (s1["c"][hs] >= .1) & (taconf[hs] >= .3); g3 = (tadir[hs] == s3["d"][hs]) & (s3["c"][hs] >= .1) & (taconf[hs] >= .3)
     w(f"| Accuracy | {a1*100:.2f}% | {a3*100:.2f}% |"); w(f"| Gated accuracy (n) | {(s1['d'][hs][g1] == ys_[g1]).mean()*100:.2f}% ({int(g1.sum())}) | {(s3['d'][hs][g3] == ys_[g3]).mean()*100:.2f}% ({int(g3.sum())}) |")
     w(f"\nSampling error here: ±{math.sqrt(0.25/hs.sum())*100:.1f} points.")
+pd.DataFrame({"target_open": pd.DatetimeIndex(T) + pd.Timedelta(minutes=15), "p1": P1, "p3": P3, "y": Y, "ta_dir": tadir, "ta_conf": taconf}).to_parquet(ROOT / "data" / "compare_v3_v1_preds.parquet", index=False)
 OUT.write_text("\n".join(L) + "\n"); print("wrote", OUT)
