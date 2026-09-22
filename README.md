@@ -63,6 +63,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 | `GET /api/v4` | v4: v1's model and TA vote called 30 s before the target 15m candle opens, on a stand-in for the forming candle. Latest call (`p_bullish`, `prediction`, `confidence`, TA vote, gate), timing to the next call, logged calls with outcomes, and the paired walk-forward comparison with v1. A request in the last 30 s of a candle makes the call if the scheduler hasn't yet. Page at `/v4` |
 | `GET /api/v5` | v5: as v4 but the call is made 10 s before the target candle opens (stand-in = first 890 s). Same response shape as `/api/v4`, plus v4's backtest for reference. Page at `/v5` |
 | `GET /api/v6` | v6: learned gate over v1. v1's call for the forming 15m candle, the gate score = P(v1 is right), pass tiers, the regime features behind it, the live record, and the walk-forward evaluation against v1's confidence rank and the standard gate. Page at `/v6` |
+| `GET /api/v7` | v7: v1's features plus closed 1h/4h context. The call for the forming 15m candle with v1's call beside it, the higher-timeframe features used, the live record for both, and the paired walk-forward comparison. Page at `/v7` |
 | `GET /api/rl?interval=1h` | RL policy for the candle forming now: `action` (LONG/FLAT/SHORT), Q-values per action in bp, edge vs flat, position change and fee, the last 96 candles' position path, and the time-split `test` block (return after fees, buy-and-hold in the same window, excess over market drift per seed, seed agreement, Sharpe, drawdown, exposure) plus rule `baselines`. 404 until `train-rl` has run for that timeframe |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |
@@ -352,6 +353,31 @@ regression, a 13-feature subset and a "skip contrarian calls in runs" rule were 
 confidence alone (`reports/learned_gate_v6.md`). The regime features that describe *where* v1's miss
 streaks happen do not say *whether* a given call will miss: gated contrarian calls inside runs are, on
 average, slightly more accurate than other gated calls, and the streaks are their losing tail.
+
+## v7: v1 plus higher-timeframe context (separate page at `/v7`)
+
+v1's 50 features plus 28 from closed 1h and 4h candles: distance from EMA 8/20/50, RSI 14, returns over
+4 and 12 bars, a short/long volatility ratio, ATR as a share of price, position in the 24-bar range, last
+bar body, run of same-direction closes, Bollinger position, volume z-score (all in that timeframe's ATR),
+and where the 15m close sits against the last closed higher-timeframe close. Each 15m row is joined to the
+latest 1h/4h candle whose close time is at or before its own, so there is no look-ahead (verified: lag
+0-45 min for 1h, 0-225 min for 4h on every row). TA vote, gate and label are v1's. `main.py train-v7`;
+`BTCPRED_V7_AUTO=0` turns the scheduler off.
+
+Paired walk-forward against v1 on the identical 63,825 out-of-sample candles and folds:
+
+| | v7 | v1 |
+|---|---|---|
+| Accuracy | 52.74% | 52.81% |
+| AUC | 0.541 | 0.539 |
+| Accuracy at confidence ≥ 0.10 (share) | 55.78% (25.7%) | 55.83% (25.0%) |
+| Gate pass rate | 20.46% | 19.57% |
+| Gated accuracy | 56.31% | 56.40% |
+
+Paired test z = -0.61: **no measurable difference.** The higher-timeframe features take
+18% of the model's split gain (led by the 15m close's distance from the last 1h close and the
+last 1h bar's body), so the model does use them, but they carry no information about the next 15m candle
+that the 15m features did not already hold. Same direction as v1 on 92.2% of candles.
 
 ## Reinforcement-learning policy
 

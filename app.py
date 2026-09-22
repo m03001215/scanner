@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import calibration, data, early10, early30, gate, intra, intra10, llm, overview, predictor, rl
+from btcpred import calibration, data, early10, early30, gate, htf, intra, intra10, llm, overview, predictor, rl
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -200,6 +200,26 @@ async def _v6_scheduler() -> None:
                 V6_STATUS.update(error=f"{type(e).__name__}: {e}"); log.warning("v6 scheduler: %s", e); await asyncio.sleep(10)
 
 
+V7_AUTO = os.environ.get("BTCPRED_V7_AUTO", "1") not in ("", "0", "false", "off")
+V7_STATUS: dict = {}
+
+
+async def _v7_scheduler() -> None:
+    """v7: call each new 15m candle ~20 s after it opens and log it alongside v1's call."""
+    loop = asyncio.get_running_loop()
+    while True:
+        now = pd.Timestamp.now(tz="UTC"); nxt = now.floor("15min") + pd.Timedelta(minutes=15) + pd.Timedelta(seconds=20)
+        await asyncio.sleep(max(0.0, (nxt - now).total_seconds()))
+        if htf.load() is None:
+            continue
+        for attempt in range(6):
+            try:
+                out = await loop.run_in_executor(None, htf.predict_now, True)
+                V7_STATUS.update(last_call=out["made_at"], last_target=out["target_candle_open"], last_prediction=out["prediction"], error=None); break
+            except Exception as e:  # noqa: BLE001
+                V7_STATUS.update(error=f"{type(e).__name__}: {e}"); log.warning("v7 scheduler: %s", e); await asyncio.sleep(10)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for iv in predictor.INTERVALS:  # warm the data cache + model so the first page load is fast
@@ -213,6 +233,7 @@ async def lifespan(_: FastAPI):
     v4_task = asyncio.create_task(_v4_scheduler()) if V4_AUTO else None
     v5_task = asyncio.create_task(_v5_scheduler()) if V5_AUTO else None
     v6_task = asyncio.create_task(_v6_scheduler()) if V6_AUTO else None
+    v7_task = asyncio.create_task(_v7_scheduler()) if V7_AUTO else None
     task = None
     if LLM_AUTO and llm.available():
         task = asyncio.create_task(_llm_scheduler())
@@ -232,6 +253,8 @@ async def lifespan(_: FastAPI):
         v5_task.cancel()
     if v6_task:
         v6_task.cancel()
+    if v7_task:
+        v7_task.cancel()
 
 
 app = FastAPI(title="BTCUSDT 15m Predictor", lifespan=lifespan)
@@ -378,6 +401,27 @@ def api_v6(candles: int = 96):
         raise HTTPException(status_code=502, detail=f"scoring failed: {type(e).__name__}: {e}")
     return dict(cur, history=gate.history(min(max(candles, 8), 500)), scheduler=V6_STATUS, auto=V6_AUTO,
                 model=dict(trained_at=meta["trained_at"], features=len(meta["features"]), report=meta["report"]))
+
+
+@app.get("/v7")
+def v7_page():
+    return FileResponse(STATIC / "v7.html")
+
+
+@app.get("/api/v7")
+def api_v7(candles: int = 96):
+    """v7: v1's features plus closed 1h/4h context. The call for the candle forming now with v1's call beside it, the
+    higher-timeframe features used, the live record for both, and the paired walk-forward comparison."""
+    loaded = htf.load()
+    if loaded is None:
+        raise HTTPException(status_code=404, detail="no v7 model; run `python main.py train-v7`")
+    _, meta = loaded
+    try:
+        cur = htf.predict_now(record=True)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"prediction failed: {type(e).__name__}: {e}")
+    return dict(cur, history=htf.history(min(max(candles, 8), 500)), scheduler=V7_STATUS, auto=V7_AUTO, gate_thresholds=dict(ml_min=htf.ML_GATE, ta_min=htf.TA_GATE),
+                model=dict(trained_at=meta["trained_at"], days=meta["days"], label=meta["label"], n_features=len(meta["features"]), comparison=meta["comparison"]))
 
 
 @app.get("/healthz")

@@ -14,3 +14,4 @@ data/compare_v*_preds.parquet
 data/v4_log_*.jsonl
 data/v5_log_*.jsonl
 data/v6_log_*.jsonl
+data/v7_log_*.jsonl
