@@ -1,0 +1,283 @@
+{
+ "features": [
+  "ml_conf",
+  "ml_dir",
+  "ta_score_signed",
+  "ta_conf",
+  "agree",
+  "ta_tie",
+  "call_vs_last",
+  "call_vs_run",
+  "call_vs_trend4h",
+  "call_vs_trend_day",
+  "call_vs_ret3",
+  "call_vs_ret8",
+  "v1_miss4",
+  "v1_miss16",
+  "v1_streak",
+  "r_vol_day",
+  "r_spike",
+  "r_last_size_atr",
+  "r_range_pos",
+  "r_atr_pct",
+  "r_vol_ratio",
+  "r_hour",
+  "r_dow",
+  "r_trend_4h_abs",
+  "r_trend_day_abs",
+  "r_run_abs",
+  "s_ema_8_20",
+  "s_ema_50_200",
+  "s_price_vs_ema20",
+  "s_macd_hist",
+  "s_macd_hist_rising",
+  "s_roc_4",
+  "s_rsi_extreme",
+  "s_stoch_cross",
+  "s_stoch_extreme",
+  "s_bollinger",
+  "s_vwap",
+  "s_volume_confirm",
+  "s_taker_flow",
+  "s_engulfing",
+  "s_hammer_star",
+  "s_three_soldiers_crows",
+  "s_breakout_96",
+  "s_near_sr"
+ ],
+ "rounds": 397,
+ "report": {
+  "n": 38609,
+  "v1_acc": 0.5291253334714704,
+  "gate_auc": 0.5242090505736657,
+  "conf_auc": 0.5271748201302093,
+  "standard_gate": {
+   "pass_rate": 0.19135434743194593,
+   "acc": 0.5741743367623172
+  },
+  "by_share": [
+   {
+    "share": 0.3,
+    "threshold": 0.5360479518028504,
+    "pass_rate": 0.30000777020901864,
+    "acc": 0.5573685573685574,
+    "conf_rank_acc": 0.5612429866206301,
+    "n": 11583
+   },
+   {
+    "share": 0.2,
+    "threshold": 0.5443067426482273,
+    "pass_rate": 0.20000518013934576,
+    "acc": 0.5655270655270656,
+    "conf_rank_acc": 0.5731486276540653,
+    "n": 7722
+   },
+   {
+    "share": 0.1,
+    "threshold": 0.5572896014221458,
+    "pass_rate": 0.10000259006967288,
+    "acc": 0.5824915824915825,
+    "conf_rank_acc": 0.5770720371804803,
+    "n": 3861
+   },
+   {
+    "share": 0.05,
+    "threshold": 0.5659991504520597,
+    "pass_rate": 0.05001424538320081,
+    "acc": 0.5841532884515795,
+    "conf_rank_acc": 0.5734229576008273,
+    "n": 1931
+   }
+  ],
+  "thresholds": {
+   "0.3": 0.5360479518028504,
+   "0.2": 0.5443067426482273,
+   "0.1": 0.5572896014221458,
+   "0.05": 0.5659991504520597
+  },
+  "folds": [
+   {
+    "test_start": "2025-08-16 04:30:00+00:00",
+    "test_end": "2025-11-04 14:30:00+00:00",
+    "best_iter": 397
+   },
+   {
+    "test_start": "2025-11-04 14:45:00+00:00",
+    "test_end": "2026-01-24 01:00:00+00:00",
+    "best_iter": 464
+   },
+   {
+    "test_start": "2026-01-24 01:15:00+00:00",
+    "test_end": "2026-04-14 11:30:00+00:00",
+    "best_iter": 419
+   },
+   {
+    "test_start": "2026-04-14 11:45:00+00:00",
+    "test_end": "2026-07-03 22:00:00+00:00",
+    "best_iter": 145
+   },
+   {
+    "test_start": "2026-07-03 22:15:00+00:00",
+    "test_end": "2026-09-22 08:30:00+00:00",
+    "best_iter": 273
+   }
+  ],
+  "test_start": "2025-08-16 04:30:00+00:00",
+  "test_end": "2026-09-22 08:30:00+00:00",
+  "at_standard_pass_rate": {
+   "pass_rate": 0.19135434743194593,
+   "acc": 0.5665944775311316,
+   "overlap_with_standard": 0.6932864103952355
+  },
+  "monthly": [
+   {
+    "month": "2025-08",
+    "n": 1518,
+    "gate_acc": 0.5463917525773195,
+    "gate_pass": 0.191699604743083,
+    "std_acc": 0.54,
+    "std_pass": 0.1976284584980237
+   },
+   {
+    "month": "2025-09",
+    "n": 2880,
+    "gate_acc": 0.5792811839323467,
+    "gate_pass": 0.1642361111111111,
+    "std_acc": 0.5884615384615385,
+    "std_pass": 0.18055555555555555
+   },
+   {
+    "month": "2025-10",
+    "n": 2976,
+    "gate_acc": 0.5467511885895404,
+    "gate_pass": 0.21202956989247312,
+    "std_acc": 0.5578947368421052,
+    "std_pass": 0.15961021505376344
+   },
+   {
+    "month": "2025-11",
+    "n": 2880,
+    "gate_acc": 0.5738831615120275,
+    "gate_pass": 0.20208333333333334,
+    "std_acc": 0.566079295154185,
+    "std_pass": 0.15763888888888888
+   },
+   {
+    "month": "2025-12",
+    "n": 2976,
+    "gate_acc": 0.5971978984238179,
+    "gate_pass": 0.19186827956989247,
+    "std_acc": 0.5808080808080808,
+    "std_pass": 0.13306451612903225
+   },
+   {
+    "month": "2026-01",
+    "n": 2976,
+    "gate_acc": 0.593698175787728,
+    "gate_pass": 0.20262096774193547,
+    "std_acc": 0.6110056925996205,
+    "std_pass": 0.17708333333333334
+   },
+   {
+    "month": "2026-02",
+    "n": 2688,
+    "gate_acc": 0.5567010309278351,
+    "gate_pass": 0.18043154761904762,
+    "std_acc": 0.5914221218961625,
+    "std_pass": 0.16480654761904762
+   },
+   {
+    "month": "2026-03",
+    "n": 2976,
+    "gate_acc": 0.5859649122807018,
+    "gate_pass": 0.19153225806451613,
+    "std_acc": 0.5889328063241107,
+    "std_pass": 0.1700268817204301
+   },
+   {
+    "month": "2026-04",
+    "n": 2880,
+    "gate_acc": 0.548582995951417,
+    "gate_pass": 0.17152777777777778,
+    "std_acc": 0.5714285714285714,
+    "std_pass": 0.16527777777777777
+   },
+   {
+    "month": "2026-05",
+    "n": 2976,
+    "gate_acc": 0.5508771929824562,
+    "gate_pass": 0.19153225806451613,
+    "std_acc": 0.5802469135802469,
+    "std_pass": 0.24495967741935484
+   },
+   {
+    "month": "2026-06",
+    "n": 2880,
+    "gate_acc": 0.5597920277296361,
+    "gate_pass": 0.20034722222222223,
+    "std_acc": 0.5549525101763908,
+    "std_pass": 0.25590277777777776
+   },
+   {
+    "month": "2026-07",
+    "n": 2976,
+    "gate_acc": 0.56353591160221,
+    "gate_pass": 0.24327956989247312,
+    "std_acc": 0.5596072931276297,
+    "std_pass": 0.23958333333333334
+   },
+   {
+    "month": "2026-08",
+    "n": 2976,
+    "gate_acc": 0.5636363636363636,
+    "gate_pass": 0.24025537634408603,
+    "std_acc": 0.5777460770328102,
+    "std_pass": 0.23555107526881722
+   },
+   {
+    "month": "2026-09",
+    "n": 2051,
+    "gate_acc": 0.5344036697247706,
+    "gate_pass": 0.21257922964407605,
+    "std_acc": 0.5644768856447688,
+    "std_pass": 0.20039005363237444
+   }
+  ],
+  "importance": {
+   "ml_conf": 28.18,
+   "call_vs_ret3": 8.73,
+   "call_vs_trend_day": 5.58,
+   "r_dow": 5.29,
+   "r_hour": 5.04,
+   "r_spike": 4.84,
+   "r_trend_4h_abs": 4.63,
+   "ta_score_signed": 4.08,
+   "s_stoch_extreme": 3.86,
+   "ta_conf": 3.41,
+   "s_taker_flow": 3.17,
+   "r_vol_ratio": 2.92,
+   "r_last_size_atr": 2.13,
+   "call_vs_trend4h": 2.01,
+   "r_vol_day": 1.82
+  },
+  "contrarian_in_run": {
+   "share": 0.19977207386878706,
+   "v1_acc": 0.5503695060287825,
+   "standard_gate_pass": 0.44703746920783094,
+   "learned_gate20_pass": 0.5462206664073642
+  }
+ },
+ "params": {
+  "objective": "binary",
+  "learning_rate": 0.01,
+  "num_leaves": 4,
+  "min_child_samples": 2000,
+  "feature_fraction": 0.5,
+  "bagging_fraction": 0.8,
+  "bagging_freq": 1,
+  "lambda_l2": 10.0,
+  "verbose": -1,
+  "seed": 7
+ },
+ "trained_at": "2026-09-22T09:01:53Z"
+}

@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from btcpred import calibration, data, early10, early30, intra, intra10, llm, overview, predictor, rl
+from btcpred import calibration, data, early10, early30, gate, intra, intra10, llm, overview, predictor, rl
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -180,6 +180,26 @@ async def _v5_scheduler() -> None:
         await asyncio.sleep(12)
 
 
+V6_AUTO = os.environ.get("BTCPRED_V6_AUTO", "1") not in ("", "0", "false", "off")
+V6_STATUS: dict = {}
+
+
+async def _v6_scheduler() -> None:
+    """v6: score v1's call for each new 15m candle ~25 s after it opens (v1's own cache has refreshed by then) and log it."""
+    loop = asyncio.get_running_loop()
+    while True:
+        now = pd.Timestamp.now(tz="UTC"); nxt = now.floor("15min") + pd.Timedelta(minutes=15) + pd.Timedelta(seconds=25)
+        await asyncio.sleep(max(0.0, (nxt - now).total_seconds()))
+        if gate.load() is None:
+            continue
+        for attempt in range(6):
+            try:
+                out = await loop.run_in_executor(None, gate.score_now, True)
+                V6_STATUS.update(last_call=out["made_at"], last_target=out["target_candle_open"], last_decision=out["decision"], error=None); break
+            except Exception as e:  # noqa: BLE001
+                V6_STATUS.update(error=f"{type(e).__name__}: {e}"); log.warning("v6 scheduler: %s", e); await asyncio.sleep(10)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for iv in predictor.INTERVALS:  # warm the data cache + model so the first page load is fast
@@ -192,6 +212,7 @@ async def lifespan(_: FastAPI):
     intra10_task = asyncio.create_task(_intra10_scheduler()) if INTRA10_AUTO else None
     v4_task = asyncio.create_task(_v4_scheduler()) if V4_AUTO else None
     v5_task = asyncio.create_task(_v5_scheduler()) if V5_AUTO else None
+    v6_task = asyncio.create_task(_v6_scheduler()) if V6_AUTO else None
     task = None
     if LLM_AUTO and llm.available():
         task = asyncio.create_task(_llm_scheduler())
@@ -209,6 +230,8 @@ async def lifespan(_: FastAPI):
         v4_task.cancel()
     if v5_task:
         v5_task.cancel()
+    if v6_task:
+        v6_task.cancel()
 
 
 app = FastAPI(title="BTCUSDT 15m Predictor", lifespan=lifespan)
@@ -333,6 +356,28 @@ def api_v5(candles: int = 96):
                 latest=latest, latest_is_for_next_candle=state == "called", error=err, history=hist, scheduler=V5_STATUS, auto=V5_AUTO,
                 gate=dict(ml_min=early10.ML_GATE, ta_min=early10.TA_GATE),
                 model=dict(trained_at=meta["trained_at"], days=meta["days"], label=meta["label"], folds=meta["folds"], comparison=meta["comparison"], v4_reference=v4c))
+
+
+@app.get("/v6")
+def v6_page():
+    return FileResponse(STATIC / "v6.html")
+
+
+@app.get("/api/v6")
+def api_v6(candles: int = 96):
+    """v6: learned gate over v1. v1's call for the candle forming now (unchanged), the gate score = P(v1 is right), which
+    pass tiers it clears, the regime features behind it, the live record, and the walk-forward evaluation against
+    v1's plain confidence rank and the standard gate."""
+    loaded = gate.load()
+    if loaded is None:
+        raise HTTPException(status_code=404, detail="no v6 gate; run `python main.py train-v6`")
+    _, meta = loaded
+    try:
+        cur = gate.score_now(record=True)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"scoring failed: {type(e).__name__}: {e}")
+    return dict(cur, history=gate.history(min(max(candles, 8), 500)), scheduler=V6_STATUS, auto=V6_AUTO,
+                model=dict(trained_at=meta["trained_at"], features=len(meta["features"]), report=meta["report"]))
 
 
 @app.get("/healthz")

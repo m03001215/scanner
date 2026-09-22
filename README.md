@@ -62,6 +62,7 @@ All endpoints take `interval=5m|15m|1h|4h` (default `15m`). Times are UTC.
 | `GET /api/intra10` | Intra-candle v3: same target as v2 (the next 15m candle) but the forming candle is described by 10-second bars and recomputed every 10 s. Separate model (`models/15m/intra10/`) and log; page at `/intra10`; includes v2's by-minute results for comparison |
 | `GET /api/v4` | v4: v1's model and TA vote called 30 s before the target 15m candle opens, on a stand-in for the forming candle. Latest call (`p_bullish`, `prediction`, `confidence`, TA vote, gate), timing to the next call, logged calls with outcomes, and the paired walk-forward comparison with v1. A request in the last 30 s of a candle makes the call if the scheduler hasn't yet. Page at `/v4` |
 | `GET /api/v5` | v5: as v4 but the call is made 10 s before the target candle opens (stand-in = first 890 s). Same response shape as `/api/v4`, plus v4's backtest for reference. Page at `/v5` |
+| `GET /api/v6` | v6: learned gate over v1. v1's call for the forming 15m candle, the gate score = P(v1 is right), pass tiers, the regime features behind it, the live record, and the walk-forward evaluation against v1's confidence rank and the standard gate. Page at `/v6` |
 | `GET /api/rl?interval=1h` | RL policy for the candle forming now: `action` (LONG/FLAT/SHORT), Q-values per action in bp, edge vs flat, position change and fee, the last 96 candles' position path, and the time-split `test` block (return after fees, buy-and-hold in the same window, excess over market drift per seed, seed agreement, Sharpe, drawdown, exposure) plus rule `baselines`. 404 until `train-rl` has run for that timeframe |
 | `GET /api/llm?interval=1h` | LLM analyst call for the candle forming now, with reason and key factors. 503 when no LLM key is set; one paid call per candle, then cached |
 | `GET /api/history?interval=1h&start=2026-09-10T17:33:00Z&end=2026-09-14&agree=true` | Per-candle out-of-sample results for any period, up to the last closed candle. See below |
@@ -325,6 +326,32 @@ At 10 s the difference from v1 is no longer statistically significant. v5's high
 fold models being a little more confident at a fixed 0.10 threshold, not extra skill: its gated accuracy is
 slightly lower. Against v3, which also calls at −10 s but with separate partial-candle features, v5 is
 0.3 points more accurate and passes the gate twice as often.
+
+## v6: learned gate over v1 (separate page at `/v6`)
+
+v1's call is unchanged; a second, deliberately tiny LightGBM model scores P(v1 is right) from v1's
+probability and confidence, the TA vote and its 18 individual signals (each signed relative to the call),
+and pre-candle regime features: whether the call continues or fades the last candle, the signed run of
+same-direction candles, 4 h and 24 h trend relative to the call, volatility level and spike, last candle
+range, position in the 24 h range, v1's recent misses and streak, hour and weekday (44 features). It is
+trained only on v1's out-of-sample calls and evaluated walk-forward on them. Decision: act when the score
+is in the top 20% of out-of-sample scores. `main.py train-v6`; `BTCPRED_V6_AUTO=0` turns the scheduler off.
+
+**Result: it does not beat v1's own confidence.** On 38,609 unseen v1 calls:
+
+| Pass share | Learned gate | v1 confidence rank, same share | Difference (pts) | Calls |
+|---|---|---|---|---|
+| top 30% | 55.74% | 56.12% | -0.39 | 11,583 |
+| top 20% | 56.55% | 57.31% | -0.76 | 7,722 |
+| top 10% | 58.25% | 57.71% | +0.54 | 3,861 |
+| top 5% | 58.42% | 57.34% | +1.07 | 1,931 |
+
+At the standard gate's pass rate (19.1%) the learned gate scores 56.66% against the
+standard gate's 57.42%. Gate AUC 0.524 vs confidence AUC 0.527. Larger models, logistic
+regression, a 13-feature subset and a "skip contrarian calls in runs" rule were all tried; none beat
+confidence alone (`reports/learned_gate_v6.md`). The regime features that describe *where* v1's miss
+streaks happen do not say *whether* a given call will miss: gated contrarian calls inside runs are, on
+average, slightly more accurate than other gated calls, and the streaks are their losing tail.
 
 ## Reinforcement-learning policy
 
